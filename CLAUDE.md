@@ -12,7 +12,7 @@
 
 ```bash
 # Install
-uv sync --dev
+uv sync --extra dev
 
 # Run with synthetic board (no hardware)
 uv run muse-vtuber --synthetic --debug
