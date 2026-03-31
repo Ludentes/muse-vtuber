@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import queue
 import signal
 import threading
 import time
 
 from muse_vtuber.config import AppConfig, parse_cli_args
-from muse_vtuber.outputs.vmc import VMCBlendshapes, VMCOutput
+from muse_vtuber.head_pose import HeadPoseEstimator, _euler_from_quat_yxz
+from muse_vtuber.outputs.vmc import VMCBlendshapes, VMCOutput, split_head_neck
 from muse_vtuber.pipeline.band_power import BandPowerStage
 from muse_vtuber.pipeline.base import Pipeline
 from muse_vtuber.pipeline.blink import BlinkDetector
@@ -66,6 +68,13 @@ def run(config: AppConfig) -> None:
         serial_port=config.serial_port,
     )
     pipeline = create_pipeline(config)
+
+    # Head tracking
+    head_pose = HeadPoseEstimator(
+        beta=config.madgwick_beta,
+        one_euro_min_cutoff=config.smoothing_min_cutoff,
+        one_euro_beta=config.smoothing_beta,
+    ) if config.head_tracking_enabled else None
 
     # Output sinks
     vmc_output = VMCOutput(config.vmc_host, config.vmc_port) if config.vmc_enabled else None
@@ -140,20 +149,38 @@ def run(config: AppConfig) -> None:
                 pipeline.run(Cadence.SLOW, frame)
                 last_slow = now
 
+            # Head tracking from IMU
+            bones = None
+            if head_pose and imu is not None and imu.shape[1] > 0:
+                for sample_idx in range(imu.shape[1]):
+                    accel = imu[:3, sample_idx]
+                    gyro = imu[3:, sample_idx]
+                    head_pose.update(accel, gyro)
+                q = head_pose.get_quaternion()
+                neck, head = split_head_neck(q)
+                bones = [neck, head]
+
             # Extract and send blendshapes
             blendshapes = extract_blendshapes(frame)
 
             if vmc_output:
-                vmc_output.send_blendshapes(blendshapes)
+                vmc_output.send_frame(blendshapes=blendshapes, bones=bones)
 
             if vts_queue is not None:
+                vts_data = {
+                    "blink": blendshapes.blink,
+                    "focus": blendshapes.focus,
+                    "relaxation": blendshapes.relaxation,
+                    "clench": blendshapes.clench,
+                }
+                if head_pose and head_pose.initialized:
+                    q = head_pose.get_quaternion()
+                    pitch, yaw, roll = _euler_from_quat_yxz(q)
+                    vts_data["face_angle_x"] = math.degrees(pitch)
+                    vts_data["face_angle_y"] = math.degrees(yaw)
+                    vts_data["face_angle_z"] = math.degrees(roll)
                 try:
-                    vts_queue.put_nowait({
-                        "blink": blendshapes.blink,
-                        "focus": blendshapes.focus,
-                        "relaxation": blendshapes.relaxation,
-                        "clench": blendshapes.clench,
-                    })
+                    vts_queue.put_nowait(vts_data)
                 except queue.Full:
                     pass  # drop frame if VTS thread is slow
 

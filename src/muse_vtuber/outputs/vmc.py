@@ -85,6 +85,23 @@ def _time_msg() -> OscMessage:
     return builder.build()
 
 
+def split_head_neck(
+    q: tuple[float, float, float, float],
+    neck_ratio: float = 0.4,
+) -> tuple[VMCBoneTransform, VMCBoneTransform]:
+    """Split head quaternion into Neck (40%) and Head (60%) bones via slerp."""
+    from muse_vtuber.one_euro import _slerp
+
+    identity = (0.0, 0.0, 0.0, 1.0)
+    neck_q = _slerp(identity, q, neck_ratio)
+    head_q = _slerp(identity, q, 1.0 - neck_ratio)
+
+    return (
+        VMCBoneTransform(bone_name="Neck", rot_x=neck_q[0], rot_y=neck_q[1], rot_z=neck_q[2], rot_w=neck_q[3]),
+        VMCBoneTransform(bone_name="Head", rot_x=head_q[0], rot_y=head_q[1], rot_z=head_q[2], rot_w=head_q[3]),
+    )
+
+
 class VMCOutput:
     """VMC protocol output via UDP/OSC.
 
