@@ -188,6 +188,10 @@ class HeadPoseEstimator:
             min_cutoff=one_euro_min_cutoff,
             beta=one_euro_beta,
         )
+        # Bias offsets (degrees) — applied in get_euler_degrees()
+        self.bias_pitch: float = 0.0
+        self.bias_yaw: float = 0.0
+        self.bias_roll: float = 0.0
 
     def update(self, accel: np.ndarray, gyro: np.ndarray) -> None:
         """Feed one IMU sample. Call at sensor rate (~52Hz).
@@ -275,7 +279,11 @@ class HeadPoseEstimator:
         """
         q = self.get_quaternion()
         pitch, yaw, roll = euler_from_quat_yxz(q)
-        return (math.degrees(pitch), math.degrees(yaw), math.degrees(roll))
+        return (
+            math.degrees(pitch) + self.bias_pitch,
+            math.degrees(yaw) + self.bias_yaw,
+            math.degrees(roll) + self.bias_roll,
+        )
 
     def recenter(self) -> None:
         """Store current orientation as home (looking straight ahead)."""

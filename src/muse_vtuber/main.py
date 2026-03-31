@@ -15,8 +15,10 @@ from muse_vtuber.pipeline.base import Pipeline
 from muse_vtuber.pipeline.blink import BlinkDetector
 from muse_vtuber.pipeline.clench import ClenchDetector, ClenchResult
 from muse_vtuber.pipeline.focus import FocusRelaxResult, FocusRelaxStage
+from muse_vtuber.pipeline.signal_quality import SignalQualityResult, SignalQualityStage
 from muse_vtuber.pipeline.speech import SpeechDetector
 from muse_vtuber.pipeline.types import Cadence, PipelineFrame
+from muse_vtuber.server import SetupUIServer
 from muse_vtuber.source import BrainFlowSource
 
 log = logging.getLogger("muse_vtuber")
@@ -32,6 +34,7 @@ def create_pipeline(config: AppConfig) -> Pipeline:
         ClenchDetector(),
         BandPowerStage(ema_decay=config.ema_decay),
         FocusRelaxStage(),
+        SignalQualityStage(),
     ]
     return Pipeline(stages=stages)
 
@@ -76,6 +79,14 @@ def run(config: AppConfig) -> None:
         one_euro_min_cutoff=config.smoothing_min_cutoff,
         one_euro_beta=config.smoothing_beta,
     ) if config.head_tracking_enabled else None
+
+    # Setup UI server
+    ui_server: SetupUIServer | None = None
+    if config.ui_enabled:
+        ui_server = SetupUIServer(port=config.ui_port)
+        ui_thread = threading.Thread(target=ui_server.run, daemon=True)
+        ui_thread.start()
+        log.info("Setup UI server on ws://localhost:%d", config.ui_port)
 
     # Output sinks
     vmc_output = VMCOutput(config.vmc_host, config.vmc_port) if config.vmc_enabled else None
@@ -183,6 +194,42 @@ def run(config: AppConfig) -> None:
                     vts_queue.put_nowait(vts_data)
                 except queue.Full:
                     log.debug("VTS queue full, dropping frame")
+
+            # Setup UI: broadcast metrics + events, handle commands
+            if ui_server:
+                # Broadcast events
+                for event in frame.events:
+                    ui_server.broadcast_event({
+                        "kind": event.kind,
+                        "confidence": event.confidence,
+                    })
+
+                # Broadcast metrics (~30Hz, throttled by poll_interval)
+                sq = frame.get(SignalQualityResult)
+                hp_pitch, hp_yaw, hp_roll = (
+                    head_pose.get_euler_degrees() if head_pose and head_pose.initialized
+                    else (0.0, 0.0, 0.0)
+                )
+                ui_server.broadcast_metrics({
+                    "signal_quality": sq.channel_quality if sq else {},
+                    "fit_status": sq.fit_status if sq else "unknown",
+                    "head_pose": {"pitch": hp_pitch, "yaw": hp_yaw, "roll": hp_roll},
+                    "settle_progress": head_pose.settle_progress if head_pose else 0,
+                    "initialized": head_pose.initialized if head_pose else False,
+                })
+
+                # Handle commands
+                cmd = ui_server.poll_command()
+                if cmd:
+                    if cmd.get("type") == "recenter" and head_pose:
+                        head_pose.recenter()
+                        log.info("Recentered head pose (UI command)")
+                    elif cmd.get("type") == "set_bias" and head_pose:
+                        head_pose.bias_pitch = cmd.get("pitch", 0.0)
+                        head_pose.bias_yaw = cmd.get("yaw", 0.0)
+                        head_pose.bias_roll = cmd.get("roll", 0.0)
+                        log.info("Set bias: pitch=%.1f yaw=%.1f roll=%.1f",
+                                 head_pose.bias_pitch, head_pose.bias_yaw, head_pose.bias_roll)
 
             if config.debug and frame.events:
                 for event in frame.events:

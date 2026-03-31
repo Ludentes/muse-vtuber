@@ -50,6 +50,11 @@ class AppConfig:
     openseeface_port: int = 11573
     fusion_alpha: float = 0.96
 
+    # Setup UI
+    ui_enabled: bool = True
+    ui_port: int = 8765
+    model_path: str = ""
+
     # Debug
     debug: bool = False
 
@@ -127,6 +132,9 @@ def parse_cli_args(args: list[str] | None = None) -> AppConfig:
     parser.add_argument("--osc-port", type=int, help="VRChat OSC port")
     parser.add_argument("--vts", action="store_true", help="Enable VTube Studio plugin")
     parser.add_argument("--vts-port", type=int, help="VTube Studio port")
+    parser.add_argument("--no-ui", action="store_true", help="Disable setup UI server")
+    parser.add_argument("--ui-port", type=int, help="Setup UI WebSocket port")
+    parser.add_argument("--model", type=str, help="Path to Live2D model folder")
     parser.add_argument("--debug", action="store_true", help="Debug logging")
     parsed = parser.parse_args(args)
 
@@ -148,6 +156,12 @@ def parse_cli_args(args: list[str] | None = None) -> AppConfig:
         cfg.vts_enabled = True
     if parsed.vts_port:
         cfg.vts_port = parsed.vts_port
+    if parsed.no_ui:
+        cfg.ui_enabled = False
+    if parsed.ui_port:
+        cfg.ui_port = parsed.ui_port
+    if parsed.model:
+        cfg.model_path = parsed.model
     if parsed.debug:
         cfg.debug = True
 
