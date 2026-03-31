@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 import numpy as np
@@ -7,6 +8,8 @@ from brainflow.data_filter import DataFilter
 
 from muse_vtuber.pipeline.base import Stage
 from muse_vtuber.pipeline.types import Cadence, PipelineFrame
+
+log = logging.getLogger("clench_detector")
 
 
 @dataclass
@@ -54,6 +57,7 @@ class ClenchDetector(Stage):
                 4, 0, 0.0,
             )
         except Exception:
+            log.warning("Bandpass filter failed", exc_info=True)
             frame.set(ClenchResult(jaw_clench=False))
             return
 
