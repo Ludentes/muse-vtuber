@@ -19,7 +19,7 @@ Quat = tuple[float, float, float, float]
 SPEED_DEADZONE = 0.15  # ~8.6°/s
 
 
-def _slerp(a: Quat, b: Quat, t: float) -> Quat:
+def slerp(a: Quat, b: Quat, t: float) -> Quat:
     """Spherical linear interpolation between quaternions."""
     # Ensure shortest path
     dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]
@@ -97,6 +97,8 @@ class OneEuroQuaternionFilter:
         self._prev_raw = raw_aligned
 
         # Smooth speed estimate
+        # TODO: this is stateless (no prev_speed memory) — matches the TS source
+        # but a proper 1€ filter would blend: alpha * speed + (1-alpha) * prev_speed
         d_alpha = self._smoothing_factor(rate, self.d_cutoff)
         smoothed_speed = d_alpha * speed
 
@@ -108,7 +110,7 @@ class OneEuroQuaternionFilter:
         alpha = self._smoothing_factor(rate, cutoff)
 
         # Slerp toward new value
-        self._prev_filtered = _slerp(self._prev_filtered, raw_aligned, alpha)
+        self._prev_filtered = slerp(self._prev_filtered, raw_aligned, alpha)
         return self._prev_filtered
 
     def reset(self) -> None:

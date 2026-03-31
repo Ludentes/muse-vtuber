@@ -44,14 +44,7 @@ def _quat_conjugate(q: Quat) -> Quat:
     return (-q[0], -q[1], -q[2], q[3])
 
 
-def _quat_normalize(q: Quat) -> Quat:
-    n = math.sqrt(sum(c * c for c in q))
-    if n < 1e-10:
-        return (0.0, 0.0, 0.0, 1.0)
-    return tuple(c / n for c in q)
-
-
-def _euler_from_quat_yxz(q: Quat) -> tuple[float, float, float]:
+def euler_from_quat_yxz(q: Quat) -> tuple[float, float, float]:
     """Quaternion → Euler angles (YXZ order: yaw, pitch, roll).
 
     Returns (pitch_x, yaw_y, roll_z) in radians.
@@ -73,7 +66,7 @@ def _euler_from_quat_yxz(q: Quat) -> tuple[float, float, float]:
     return (pitch, yaw, roll)
 
 
-def _quat_from_euler_yxz(pitch: float, yaw: float, roll: float) -> Quat:
+def quat_from_euler_yxz(pitch: float, yaw: float, roll: float) -> Quat:
     """Euler angles (YXZ) → quaternion (x, y, z, w)."""
     cx = math.cos(pitch / 2)
     sx = math.sin(pitch / 2)
@@ -254,7 +247,7 @@ class HeadPoseEstimator:
         remapped = self._muse_to_vrm(relative)
 
         # Decompose for yaw decay + pitch invert
-        pitch, yaw, roll = _euler_from_quat_yxz(remapped)
+        pitch, yaw, roll = euler_from_quat_yxz(remapped)
 
         # Invert pitch (VRM convention)
         pitch = -pitch
@@ -266,13 +259,23 @@ class HeadPoseEstimator:
         yaw *= (1 - decay_per_frame)
 
         # Recompose
-        result = _quat_from_euler_yxz(pitch, yaw, roll)
+        result = quat_from_euler_yxz(pitch, yaw, roll)
 
         # One Euro smoothing
         timestamp = self._frame_count / self._sample_rate
         result = self._one_euro.filter(result, timestamp)
 
         return result
+
+    def get_euler_degrees(self) -> tuple[float, float, float]:
+        """Get head orientation as (pitch, yaw, roll) in degrees.
+
+        Convenience wrapper for VTube Studio FaceAngleX/Y/Z injection.
+        Returns (0, 0, 0) until initialized.
+        """
+        q = self.get_quaternion()
+        pitch, yaw, roll = euler_from_quat_yxz(q)
+        return (math.degrees(pitch), math.degrees(yaw), math.degrees(roll))
 
     def recenter(self) -> None:
         """Store current orientation as home (looking straight ahead)."""

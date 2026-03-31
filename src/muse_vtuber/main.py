@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import queue
 import signal
 import threading
 import time
 
 from muse_vtuber.config import AppConfig, parse_cli_args
-from muse_vtuber.head_pose import HeadPoseEstimator, _euler_from_quat_yxz
+from muse_vtuber.head_pose import HeadPoseEstimator
 from muse_vtuber.outputs.vmc import VMCBlendshapes, VMCOutput, split_head_neck
 from muse_vtuber.pipeline.band_power import BandPowerStage
 from muse_vtuber.pipeline.base import Pipeline
@@ -174,15 +173,14 @@ def run(config: AppConfig) -> None:
                     "clench": blendshapes.clench,
                 }
                 if head_pose and head_pose.initialized:
-                    q = head_pose.get_quaternion()
-                    pitch, yaw, roll = _euler_from_quat_yxz(q)
-                    vts_data["face_angle_x"] = math.degrees(pitch)
-                    vts_data["face_angle_y"] = math.degrees(yaw)
-                    vts_data["face_angle_z"] = math.degrees(roll)
+                    pitch, yaw, roll = head_pose.get_euler_degrees()
+                    vts_data["face_angle_x"] = pitch
+                    vts_data["face_angle_y"] = yaw
+                    vts_data["face_angle_z"] = roll
                 try:
                     vts_queue.put_nowait(vts_data)
                 except queue.Full:
-                    pass  # drop frame if VTS thread is slow
+                    log.debug("VTS queue full, dropping frame")
 
             if config.debug and frame.events:
                 for event in frame.events:
