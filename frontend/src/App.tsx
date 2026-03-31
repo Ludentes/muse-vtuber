@@ -1,10 +1,12 @@
+import { BiasControls } from "./components/BiasControls";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 import { Live2DAvatar } from "./components/Live2DAvatar";
+import { SettleOverlay } from "./components/SettleOverlay";
 import { SignalQuality } from "./components/SignalQuality";
 import { useMuseStream } from "./hooks/useMuseStream";
 
 function App() {
-  const { metrics, lastEvent, connected } = useMuseStream();
+  const { metrics, lastEvent, connected, send } = useMuseStream();
 
   return (
     <div className="dark min-h-screen bg-background text-foreground flex">
@@ -24,7 +26,7 @@ function App() {
         {metrics?.initialized && (
           <div className="space-y-1">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Head Pose
+              Live Values
             </span>
             <div className="grid grid-cols-3 gap-1 text-center">
               {(["pitch", "yaw", "roll"] as const).map((axis) => (
@@ -39,20 +41,7 @@ function App() {
           </div>
         )}
 
-        {/* Settle progress */}
-        {metrics && !metrics.initialized && (
-          <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">
-              Calibrating... hold still
-            </span>
-            <div className="h-2 rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full rounded-full bg-primary transition-all duration-300"
-                style={{ width: `${Math.round(metrics.settle_progress * 100)}%` }}
-              />
-            </div>
-          </div>
-        )}
+        <BiasControls send={send} />
 
         {/* Last BCI event */}
         {lastEvent && (
@@ -62,15 +51,17 @@ function App() {
           </div>
         )}
 
-        {/* Placeholder for bias controls (Task 6) */}
         <div className="mt-auto text-[10px] text-muted-foreground">
-          Bias controls coming next...
+          Start backend: uv run muse-vtuber --synthetic --model /path/to/model
         </div>
       </div>
 
-      {/* Main area — Live2D avatar */}
-      <div className="flex-1">
+      {/* Main area — Live2D avatar + settle overlay */}
+      <div className="flex-1 relative">
         <Live2DAvatar metrics={metrics} lastEvent={lastEvent} />
+        {connected && metrics && !metrics.initialized && (
+          <SettleOverlay settleProgress={metrics.settle_progress} />
+        )}
       </div>
     </div>
   );
