@@ -88,7 +88,11 @@ def run(config: AppConfig) -> None:
                     return
                 while running:
                     try:
-                        data = vts_queue.get(timeout=0.1)
+                        # Use run_in_executor so the blocking get doesn't
+                        # freeze the event loop (drain task needs to run)
+                        data = await asyncio.get_event_loop().run_in_executor(
+                            None, lambda: vts_queue.get(timeout=0.1)
+                        )
                         await vts_client.inject(**data)
                     except queue.Empty:
                         pass
