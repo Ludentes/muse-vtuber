@@ -18,7 +18,7 @@ from muse_vtuber.pipeline.focus import FocusRelaxResult, FocusRelaxStage
 from muse_vtuber.pipeline.signal_quality import SignalQualityResult, SignalQualityStage
 from muse_vtuber.pipeline.speech import SpeechDetector
 from muse_vtuber.pipeline.types import Cadence, PipelineFrame
-from muse_vtuber.server import SetupUIServer
+from muse_vtuber.server import ModelFileServer, SetupUIServer
 from muse_vtuber.source import BrainFlowSource
 
 log = logging.getLogger("muse_vtuber")
@@ -87,6 +87,12 @@ def run(config: AppConfig) -> None:
         ui_thread = threading.Thread(target=ui_server.run, daemon=True)
         ui_thread.start()
         log.info("Setup UI server on ws://localhost:%d", config.ui_port)
+
+    # Model file server (for Live2D assets)
+    if config.model_path:
+        model_server = ModelFileServer(config.model_path, port=8766)
+        model_thread = threading.Thread(target=model_server.run, daemon=True)
+        model_thread.start()
 
     # Output sinks
     vmc_output = VMCOutput(config.vmc_host, config.vmc_port) if config.vmc_enabled else None

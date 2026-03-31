@@ -1,4 +1,5 @@
 import { ConnectionStatus } from "./components/ConnectionStatus";
+import { Live2DAvatar } from "./components/Live2DAvatar";
 import { SignalQuality } from "./components/SignalQuality";
 import { useMuseStream } from "./hooks/useMuseStream";
 
@@ -67,11 +68,9 @@ function App() {
         </div>
       </div>
 
-      {/* Main area — avatar placeholder */}
-      <div className="flex-1 flex items-center justify-center bg-zinc-950">
-        <p className="text-zinc-600 text-sm">
-          {connected ? "Avatar area (Live2D coming next)" : "Waiting for backend..."}
-        </p>
+      {/* Main area — Live2D avatar */}
+      <div className="flex-1">
+        <Live2DAvatar metrics={metrics} lastEvent={lastEvent} />
       </div>
     </div>
   );

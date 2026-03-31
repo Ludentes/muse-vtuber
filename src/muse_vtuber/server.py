@@ -4,14 +4,19 @@ Broadcasts JSON metrics and BCI events to connected browser clients.
 Receives commands (recenter, set_bias) from the frontend.
 
 Runs in a separate thread with its own asyncio event loop.
+
+Also provides a static HTTP file server for Live2D model directories.
 """
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
 import queue
 import threading
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+from pathlib import Path
 
 import websockets
 
@@ -95,3 +100,43 @@ class SetupUIServer:
         self._stop_event.set()
         if self._loop:
             self._loop.call_soon_threadsafe(self._loop.stop)
+
+
+class _CORSHandler(SimpleHTTPRequestHandler):
+    """Static file handler with CORS headers for Vite dev proxy."""
+
+    def end_headers(self) -> None:
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        super().end_headers()
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, format: str, *args: object) -> None:
+        log.debug("Model server: %s", format % args)
+
+
+class ModelFileServer:
+    """HTTP static file server for a Live2D model directory.
+
+    Serves files from model_dir on the given port. Runs in a daemon thread.
+    """
+
+    def __init__(self, model_dir: str | Path, port: int = 8766):
+        self.model_dir = Path(model_dir)
+        self.port = port
+        self._httpd: HTTPServer | None = None
+
+    def run(self) -> None:
+        """Blocking — call from a thread."""
+        handler = functools.partial(_CORSHandler, directory=str(self.model_dir))
+        self._httpd = HTTPServer(("0.0.0.0", self.port), handler)
+        log.info("Model file server on http://0.0.0.0:%d (dir=%s)", self.port, self.model_dir)
+        self._httpd.serve_forever()
+
+    def stop(self) -> None:
+        if self._httpd:
+            self._httpd.shutdown()
