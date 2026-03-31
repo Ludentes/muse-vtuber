@@ -15,15 +15,15 @@ def test_vmc_output_builds_blendshape_messages():
     )
     messages = vmc.build_blendshape_messages(blendshapes)
 
-    # Should have: 4 Blend/Val + 1 Blend/Apply + 1 OK + 1 T = 7
+    # Blendshape-only: 4 Blend/Val + 1 Blend/Apply = 5
+    # No OK/Root/T — those only sent with bone data to avoid overriding receiver's tracking
     addresses = [m.address for m in messages]
-    assert "/VMC/Ext/Blend/Val" in addresses
-    assert "/VMC/Ext/Blend/Apply" in addresses
-    assert "/VMC/Ext/OK" in addresses
-    assert "/VMC/Ext/T" in addresses
+    assert addresses.count("/VMC/Ext/Blend/Val") == 4
+    assert addresses.count("/VMC/Ext/Blend/Apply") == 1
+    assert "/VMC/Ext/OK" not in addresses
 
-    # Check blink value
-    blink_msgs = [m for m in messages if m.address == "/VMC/Ext/Blend/Val" and m.params[0] == "blink"]
+    # Check blink value (VRM standard name: capital B)
+    blink_msgs = [m for m in messages if m.address == "/VMC/Ext/Blend/Val" and m.params[0] == "Blink"]
     assert len(blink_msgs) == 1
     assert blink_msgs[0].params[1] == 1.0
 
@@ -34,7 +34,7 @@ def test_vmc_blendshape_names():
     blendshapes = VMCBlendshapes(blink=0.5, clench=0.0, focus=0.0, relaxation=0.0)
     messages = vmc.build_blendshape_messages(blendshapes)
     blend_names = [m.params[0] for m in messages if m.address == "/VMC/Ext/Blend/Val"]
-    assert "blink" in blend_names
+    assert "Blink" in blend_names
     assert "muse_clench" in blend_names
     assert "muse_focus" in blend_names
     assert "muse_relaxation" in blend_names

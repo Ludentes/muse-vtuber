@@ -59,7 +59,23 @@ def _bone_pos(bone: VMCBoneTransform) -> OscMessage:
 
 def _ok() -> OscMessage:
     builder = OscMessageBuilder(address="/VMC/Ext/OK")
-    builder.add_arg(1)
+    builder.add_arg(0)  # 0 = loaded, 1 = calibrating
+    return builder.build()
+
+
+def _root_pos() -> OscMessage:
+    """Identity root transform — keeps character in place."""
+    builder = OscMessageBuilder(address="/VMC/Ext/Root/Pos")
+    builder.add_arg("root")
+    # position (0, 0, 0)
+    builder.add_arg(float(0))
+    builder.add_arg(float(0))
+    builder.add_arg(float(0))
+    # rotation identity quaternion (0, 0, 0, 1)
+    builder.add_arg(float(0))
+    builder.add_arg(float(0))
+    builder.add_arg(float(0))
+    builder.add_arg(float(1))
     return builder.build()
 
 
@@ -76,8 +92,9 @@ class VMCOutput:
     Uses python-osc directly (no python-vmcp dependency).
     """
 
+    # VRM standard names (capital B for Blink) + custom muse_ prefixed names
     BLEND_MAP = {
-        "blink": "blink",
+        "blink": "Blink",
         "clench": "muse_clench",
         "focus": "muse_focus",
         "relaxation": "muse_relaxation",
@@ -102,8 +119,6 @@ class VMCOutput:
         for internal_name, vmc_name in self.BLEND_MAP.items():
             messages.append(_blend_val(vmc_name, values[internal_name]))
         messages.append(_blend_apply())
-        messages.append(_ok())
-        messages.append(_time_msg())
         return messages
 
     def build_bone_messages(self, bones: list[VMCBoneTransform]) -> list[OscMessage]:
@@ -129,10 +144,18 @@ class VMCOutput:
         blendshapes: VMCBlendshapes | None = None,
         bones: list[VMCBoneTransform] | None = None,
     ) -> None:
-        """Send a complete VMC frame (blendshapes + bones + status)."""
+        """Send a complete VMC frame (blendshapes + bones + status).
+
+        When bones are provided, sends full performer frame (bones + root + OK + time).
+        When only blendshapes, sends just blend values — no OK/root to avoid
+        overriding the receiver's own bone tracking.
+        """
         if self._client is None:
             return
         if bones:
+            self._client.send(_root_pos())
             self.send_bones(bones)
+            self._client.send(_ok())
+            self._client.send(_time_msg())
         if blendshapes:
             self.send_blendshapes(blendshapes)
