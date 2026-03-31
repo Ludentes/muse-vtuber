@@ -26,6 +26,7 @@
     "pixi.js": "^8",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-use-websocket": "^4.13.0",
     "shadcn": "^4.1.2",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.2",
