@@ -91,6 +91,7 @@ class VTSClient:
         self._ws = None
         self._authenticated = False
         self._token: str | None = None
+        self._drain_task: asyncio.Task | None = None
 
     async def connect(self) -> bool:
         """Connect to VTube Studio and authenticate."""
@@ -108,6 +109,7 @@ class VTSClient:
                 self._authenticated = True
                 log.info("Authenticated with saved token")
                 await self._create_parameters()
+                await self._start_drain()
                 return True
 
         # Request new token (shows popup in VTube Studio)
@@ -118,6 +120,7 @@ class VTSClient:
                 self._authenticated = True
                 log.info("Authenticated with new token")
                 await self._create_parameters()
+                await self._start_drain()
                 return True
 
         return False
@@ -154,6 +157,22 @@ class VTSClient:
             )
             log.debug("Created VTS parameter: %s", name)
 
+    async def _start_drain(self) -> None:
+        """Start background task that reads and discards VTS responses.
+
+        VTS sends a response for every injection request. Without draining,
+        the receive buffer fills up and VTS drops the connection.
+        """
+        async def _drain() -> None:
+            assert self._ws is not None
+            try:
+                async for _ in self._ws:
+                    pass  # discard all responses
+            except Exception:
+                pass  # connection closed
+
+        self._drain_task = asyncio.ensure_future(_drain())
+
     async def inject(
         self,
         blink: float = 0.0,
@@ -173,12 +192,13 @@ class VTSClient:
         msg = build_parameter_injection_request(params)
         try:
             await self._ws.send(msg)
-            # Don't wait for response — fire and forget for injection
         except Exception as e:
             self._authenticated = False
-            log.warning("VTS connection lost, will retry: %s", e)
+            log.warning("VTS connection lost: %s", e)
 
     async def close(self) -> None:
+        if self._drain_task and not self._drain_task.done():
+            self._drain_task.cancel()
         if self._ws:
             await self._ws.close()
             self._ws = None
