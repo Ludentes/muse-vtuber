@@ -24,9 +24,11 @@ log = logging.getLogger("muse_vtuber")
 
 def create_pipeline(config: AppConfig) -> Pipeline:
     """Create the processing pipeline with all stages."""
+    blink = BlinkDetector()
+    blink.guard_speech = False
     stages = [
         SpeechDetector(),
-        BlinkDetector(),
+        blink,
         ClenchDetector(),
         BandPowerStage(ema_decay=config.ema_decay),
         FocusRelaxStage(),
