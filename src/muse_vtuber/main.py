@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import queue
 import signal
+import threading
 import time
 
 from muse_vtuber.config import AppConfig, parse_cli_args
@@ -67,6 +70,34 @@ def run(config: AppConfig) -> None:
     # Output sinks
     vmc_output = VMCOutput(config.vmc_host, config.vmc_port) if config.vmc_enabled else None
 
+    # VTube Studio (async, runs in thread)
+    vts_queue: queue.Queue | None = None
+    if config.vts_enabled:
+        from muse_vtuber.outputs.vts import VTSClient
+        vts_client = VTSClient(port=config.vts_port)
+        vts_queue = queue.Queue(maxsize=1)
+
+        def _vts_thread() -> None:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            async def _run() -> None:
+                connected = await vts_client.connect()
+                if not connected:
+                    log.warning("VTube Studio not available")
+                    return
+                while running:
+                    try:
+                        data = vts_queue.get(timeout=0.1)
+                        await vts_client.inject(**data)
+                    except queue.Empty:
+                        pass
+
+            loop.run_until_complete(_run())
+
+        vts_thread = threading.Thread(target=_vts_thread, daemon=True)
+        vts_thread.start()
+
     # Graceful shutdown
     running = True
 
@@ -110,6 +141,17 @@ def run(config: AppConfig) -> None:
 
             if vmc_output:
                 vmc_output.send_blendshapes(blendshapes)
+
+            if vts_queue is not None:
+                try:
+                    vts_queue.put_nowait({
+                        "blink": blendshapes.blink,
+                        "focus": blendshapes.focus,
+                        "relaxation": blendshapes.relaxation,
+                        "clench": blendshapes.clench,
+                    })
+                except queue.Full:
+                    pass  # drop frame if VTS thread is slow
 
             if config.debug and frame.events:
                 for event in frame.events:

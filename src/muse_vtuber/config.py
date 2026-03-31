@@ -125,6 +125,8 @@ def parse_cli_args(args: list[str] | None = None) -> AppConfig:
     parser.add_argument("--vmc-port", type=int, help="VMC output port")
     parser.add_argument("--osc", action="store_true", help="Enable VRChat OSC output")
     parser.add_argument("--osc-port", type=int, help="VRChat OSC port")
+    parser.add_argument("--vts", action="store_true", help="Enable VTube Studio plugin")
+    parser.add_argument("--vts-port", type=int, help="VTube Studio port")
     parser.add_argument("--debug", action="store_true", help="Debug logging")
     parsed = parser.parse_args(args)
 
@@ -142,6 +144,10 @@ def parse_cli_args(args: list[str] | None = None) -> AppConfig:
         cfg.osc_enabled = True
     if parsed.osc_port:
         cfg.osc_port = parsed.osc_port
+    if parsed.vts:
+        cfg.vts_enabled = True
+    if parsed.vts_port:
+        cfg.vts_port = parsed.vts_port
     if parsed.debug:
         cfg.debug = True
 
