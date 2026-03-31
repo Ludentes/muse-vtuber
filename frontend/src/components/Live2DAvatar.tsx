@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Application } from "pixi.js";
 import { Live2DModel } from "@naari3/pixi-live2d-display";
 import type { MuseMetrics, BciEvent } from "../hooks/useMuseStream";
@@ -17,6 +17,7 @@ const BLINK_OPEN_MS = 100;
 interface Props {
   metrics: MuseMetrics | null;
   lastEvent: BciEvent | null;
+  modelFile?: string;
 }
 
 interface ParamMap {
@@ -35,18 +36,18 @@ function buildParamMap(coreModel: any): ParamMap {
   return map;
 }
 
-export function Live2DAvatar({ metrics, lastEvent }: Props) {
+export function Live2DAvatar({ metrics, lastEvent, modelFile }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const modelRef = useRef<Live2DModel | null>(null);
   const paramMapRef = useRef<ParamMap>({});
   const blinkRef = useRef({ active: false, startTime: 0, lastEventKind: "" });
-  const errorRef = useRef<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Initialize PixiJS + load model
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !modelFile) return;
 
     let cancelled = false;
 
@@ -67,7 +68,7 @@ export function Live2DAvatar({ metrics, lastEvent }: Props) {
       appRef.current = app;
 
       try {
-        const model = await Live2DModel.from("/model/akari.model3.json");
+        const model = await Live2DModel.from(`/model/${modelFile}`);
         if (cancelled) return;
 
         // Scale to fit canvas
@@ -89,7 +90,7 @@ export function Live2DAvatar({ metrics, lastEvent }: Props) {
         }
       } catch (err) {
         console.error("Live2D model load failed:", err);
-        errorRef.current = "Failed to load Live2D model. Is --model set?";
+        setError("Failed to load Live2D model. Is --model set?");
       }
     }
 
@@ -103,7 +104,7 @@ export function Live2DAvatar({ metrics, lastEvent }: Props) {
       }
       modelRef.current = null;
     };
-  }, []);
+  }, [modelFile]);
 
   // Drive parameters from metrics + events
   useEffect(() => {
@@ -169,9 +170,14 @@ export function Live2DAvatar({ metrics, lastEvent }: Props) {
 
   return (
     <div ref={containerRef} className="w-full h-full relative">
-      {errorRef.current && (
+      {!modelFile && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <p className="text-sm text-destructive">{errorRef.current}</p>
+          <p className="text-sm text-muted-foreground">No model configured. Start backend with --model flag.</p>
+        </div>
+      )}
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <p className="text-sm text-destructive">{error}</p>
         </div>
       )}
     </div>

@@ -146,6 +146,15 @@ def run(config: AppConfig) -> None:
     poll_interval = 1.0 / 60  # 60Hz poll rate
     slow_cadence_interval = 1.0
     last_slow = time.monotonic()
+    last_sq: SignalQualityResult | None = None  # cache for UI broadcast
+
+    # Auto-detect model3.json filename for frontend
+    model_file = ""
+    if config.model_path:
+        from pathlib import Path
+        for f in Path(config.model_path).glob("*.model3.json"):
+            model_file = f.name
+            break
 
     try:
         while running:
@@ -212,16 +221,19 @@ def run(config: AppConfig) -> None:
 
                 # Broadcast metrics (~30Hz, throttled by poll_interval)
                 sq = frame.get(SignalQualityResult)
+                if sq is not None:
+                    last_sq = sq
                 hp_pitch, hp_yaw, hp_roll = (
                     head_pose.get_euler_degrees() if head_pose and head_pose.initialized
                     else (0.0, 0.0, 0.0)
                 )
                 ui_server.broadcast_metrics({
-                    "signal_quality": sq.channel_quality if sq else {},
-                    "fit_status": sq.fit_status if sq else "unknown",
+                    "signal_quality": last_sq.channel_quality if last_sq else {},
+                    "fit_status": last_sq.fit_status if last_sq else "unknown",
                     "head_pose": {"pitch": hp_pitch, "yaw": hp_yaw, "roll": hp_roll},
                     "settle_progress": head_pose.settle_progress if head_pose else 0,
                     "initialized": head_pose.initialized if head_pose else False,
+                    "model_file": model_file,
                 })
 
                 # Handle commands

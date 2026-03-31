@@ -7,6 +7,7 @@ export interface MuseMetrics {
   head_pose: { pitch: number; yaw: number; roll: number };
   settle_progress: number;
   initialized: boolean;
+  model_file: string;
 }
 
 export interface BciEvent {
@@ -34,8 +35,8 @@ export function useMuseStream() {
           clearTimeout(lastEventTimer.current);
           lastEventTimer.current = setTimeout(() => setLastEvent(null), 500);
         }
-      } catch {
-        // ignore malformed JSON
+      } catch (err) {
+        console.warn("Malformed WS message:", event.data, err);
       }
     },
     shouldReconnect: () => true,

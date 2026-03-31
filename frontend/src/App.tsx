@@ -58,7 +58,7 @@ function App() {
 
       {/* Main area — Live2D avatar + settle overlay */}
       <div className="flex-1 relative">
-        <Live2DAvatar metrics={metrics} lastEvent={lastEvent} />
+        <Live2DAvatar metrics={metrics} lastEvent={lastEvent} modelFile={metrics?.model_file} />
         {connected && metrics && !metrics.initialized && (
           <SettleOverlay settleProgress={metrics.settle_progress} />
         )}
