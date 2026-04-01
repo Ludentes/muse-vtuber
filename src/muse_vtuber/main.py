@@ -7,6 +7,8 @@ import signal
 import threading
 import time
 
+import numpy as np
+
 from muse_vtuber.config import AppConfig, parse_cli_args
 from muse_vtuber.head_pose import HeadPoseEstimator
 from muse_vtuber.outputs.vmc import VMCBlendshapes, VMCOutput, split_head_neck
@@ -147,6 +149,7 @@ def run(config: AppConfig) -> None:
     slow_cadence_interval = 1.0
     last_slow = time.monotonic()
     last_sq: SignalQualityResult | None = None  # cache for UI broadcast
+    eeg_buf: np.ndarray | None = None  # rolling buffer for SLOW stages
 
     # Auto-detect model3.json filename for frontend
     model_file = ""
@@ -168,12 +171,24 @@ def run(config: AppConfig) -> None:
             now = time.monotonic()
             frame = PipelineFrame(eeg=eeg, imu=imu, timestamp=now)
 
+            # Accumulate EEG buffer for SLOW stages (need >= 256 samples)
+            if eeg is not None:
+                eeg_buf = np.concatenate([eeg_buf, eeg], axis=1) if eeg_buf is not None else eeg
+                # Keep last 512 samples max (2 seconds)
+                if eeg_buf.shape[1] > 512:
+                    eeg_buf = eeg_buf[:, -512:]
+
             # Run FAST stages every poll
             pipeline.run(Cadence.FAST, frame)
 
-            # Run SLOW stages periodically
+            # Run SLOW stages periodically with accumulated buffer
             if now - last_slow >= slow_cadence_interval:
-                pipeline.run(Cadence.SLOW, frame)
+                slow_frame = PipelineFrame(eeg=eeg_buf, imu=imu, timestamp=now)
+                slow_frame.events = frame.events
+                slow_frame._results = frame._results
+                pipeline.run(Cadence.SLOW, slow_frame)
+                # Copy results back so downstream code sees them
+                frame._results.update(slow_frame._results)
                 last_slow = now
 
             # Head tracking from IMU

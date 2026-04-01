@@ -1,5 +1,8 @@
 import { useCallback, useRef, useState } from "react";
-import useWebSocket, { ReadyState } from "react-use-websocket";
+import reactUseWebSocket, { ReadyState } from "react-use-websocket";
+
+// CJS default export interop — Vite 8 may wrap the module
+const useWebSocket = (reactUseWebSocket as any).default ?? reactUseWebSocket;
 
 export interface MuseMetrics {
   signal_quality: Record<string, number>;
@@ -23,7 +26,7 @@ export function useMuseStream() {
   const lastEventTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const { readyState, sendJsonMessage } = useWebSocket(WS_URL, {
-    onMessage: (event) => {
+    onMessage: (event: MessageEvent) => {
       if (typeof event.data !== "string") return;
       try {
         const msg = JSON.parse(event.data);
