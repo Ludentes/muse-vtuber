@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Slider } from "./ui/slider";
 import { Button } from "./ui/button";
 
@@ -38,8 +38,10 @@ export function BiasControls({ send }: Props) {
   const [yaw, setYaw] = useState(0);
   const [roll, setRoll] = useState(0);
 
-  // Send bias to backend whenever sliders change
+  // Send bias to backend whenever sliders change (skip initial mount)
+  const mounted = useRef(false);
   useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return; }
     send({ type: "set_bias", pitch, yaw, roll });
   }, [pitch, yaw, roll, send]);
 

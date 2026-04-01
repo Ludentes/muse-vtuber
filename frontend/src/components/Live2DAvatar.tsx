@@ -41,8 +41,18 @@ export function Live2DAvatar({ metrics, lastEvent, modelFile }: Props) {
   const appRef = useRef<Application | null>(null);
   const modelRef = useRef<Live2DModel | null>(null);
   const paramMapRef = useRef<ParamMap>({});
-  const blinkRef = useRef({ active: false, startTime: 0, lastEventKind: "" });
+  const blinkRef = useRef({
+    active: false,
+    startTime: 0,
+    lastProcessedEvent: null as BciEvent | null,
+  });
   const [error, setError] = useState<string | null>(null);
+
+  // Store metrics and lastEvent in refs so animation loop doesn't re-mount
+  const metricsRef = useRef(metrics);
+  const lastEventRef = useRef(lastEvent);
+  metricsRef.current = metrics;
+  lastEventRef.current = lastEvent;
 
   // Initialize PixiJS + load model
   useEffect(() => {
@@ -106,7 +116,7 @@ export function Live2DAvatar({ metrics, lastEvent, modelFile }: Props) {
     };
   }, [modelFile]);
 
-  // Drive parameters from metrics + events
+  // Drive parameters from metrics + events (runs once, reads refs)
   useEffect(() => {
     let raf: number;
 
@@ -119,10 +129,12 @@ export function Live2DAvatar({ metrics, lastEvent, modelFile }: Props) {
       }
 
       const pmap = paramMapRef.current;
+      const currentMetrics = metricsRef.current;
+      const currentEvent = lastEventRef.current;
 
       // Head angles from metrics
-      if (metrics?.initialized) {
-        const { pitch, yaw, roll } = metrics.head_pose;
+      if (currentMetrics?.initialized) {
+        const { pitch, yaw, roll } = currentMetrics.head_pose;
         if (PARAM_ANGLE_X in pmap) {
           coreModel.setParameterValueByIndex(pmap[PARAM_ANGLE_X], yaw);
         }
@@ -134,11 +146,16 @@ export function Live2DAvatar({ metrics, lastEvent, modelFile }: Props) {
         }
       }
 
-      // Blink animation
+      // Blink animation — track last processed event to avoid re-triggering
       const blink = blinkRef.current;
-      if (lastEvent?.kind === "blink" && !blink.active) {
+      if (
+        currentEvent?.kind === "blink" &&
+        !blink.active &&
+        currentEvent !== blink.lastProcessedEvent
+      ) {
         blink.active = true;
         blink.startTime = performance.now();
+        blink.lastProcessedEvent = currentEvent;
       }
 
       let eyeOpen = 1.0;
@@ -166,7 +183,7 @@ export function Live2DAvatar({ metrics, lastEvent, modelFile }: Props) {
 
     raf = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(raf);
-  }, [metrics, lastEvent]);
+  }, []);
 
   return (
     <div ref={containerRef} className="w-full h-full relative">

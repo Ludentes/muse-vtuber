@@ -33,7 +33,7 @@ function App() {
                 <div key={axis} className="bg-muted rounded px-2 py-1">
                   <div className="text-[10px] text-muted-foreground uppercase">{axis}</div>
                   <div className="text-sm font-mono">
-                    {metrics.head_pose[axis].toFixed(1)}
+                    {(metrics.head_pose?.[axis] ?? 0).toFixed(1)}
                   </div>
                 </div>
               ))}

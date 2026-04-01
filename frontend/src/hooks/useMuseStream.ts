@@ -31,9 +31,10 @@ export function useMuseStream() {
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === "metrics") {
-          setMetrics(msg as MuseMetrics);
+          const { type: _, ...metricsData } = msg;
+          setMetrics(metricsData as MuseMetrics);
         } else if (msg.type === "bci_event") {
-          setLastEvent({ kind: msg.kind, confidence: msg.confidence });
+          setLastEvent({ kind: msg.kind, confidence: msg.confidence ?? 0 });
           // Clear event after 500ms so UI can flash
           clearTimeout(lastEventTimer.current);
           lastEventTimer.current = setTimeout(() => setLastEvent(null), 500);
