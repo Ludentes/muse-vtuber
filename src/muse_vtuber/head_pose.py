@@ -278,11 +278,15 @@ class HeadPoseEstimator:
         Returns (0, 0, 0) until initialized.
         """
         q = self.get_quaternion()
-        pitch, yaw, roll = euler_from_quat_yxz(q)
+        pitch, euler_y, euler_z = euler_from_quat_yxz(q)
+        # After Muse→VRM axis remap, physical yaw (head turn) ends up in the
+        # Z euler slot and physical roll (head tilt) in the Y slot.
+        physical_yaw = euler_z
+        physical_roll = euler_y
         return (
             math.degrees(pitch) + self.bias_pitch,
-            math.degrees(yaw) + self.bias_yaw,
-            math.degrees(roll) + self.bias_roll,
+            math.degrees(physical_yaw) + self.bias_yaw,
+            math.degrees(physical_roll) + self.bias_roll,
         )
 
     def recenter(self) -> None:

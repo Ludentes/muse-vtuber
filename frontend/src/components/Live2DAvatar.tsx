@@ -1,18 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import * as PIXI from "pixi.js";
 import { Application } from "pixi.js";
-import { Live2DModel } from "@naari3/pixi-live2d-display";
+import { Live2DModel } from "untitled-pixi-live2d-engine/cubism";
 import type { MuseMetrics, BciEvent } from "../hooks/useMuseStream";
-
-// pixi-live2d-display requires window.PIXI for Ticker access (PixiJS v8 doesn't set this)
-(window as any).PIXI = PIXI;
-
-// Live2D parameter names
-const PARAM_ANGLE_X = "ParamAngleX";
-const PARAM_ANGLE_Y = "ParamAngleY";
-const PARAM_ANGLE_Z = "ParamAngleZ";
-const PARAM_EYE_L_OPEN = "ParamEyeLOpen";
-const PARAM_EYE_R_OPEN = "ParamEyeROpen";
 
 // Blink animation: close over 50ms, reopen over 100ms
 const BLINK_CLOSE_MS = 50;
@@ -24,27 +13,9 @@ interface Props {
   modelFile?: string;
 }
 
-interface ParamMap {
-  [name: string]: number; // param name → index
-}
-
-function buildParamMap(coreModel: any): ParamMap {
-  const map: ParamMap = {};
-  const count: number = coreModel.getParameterCount();
-  for (let i = 0; i < count; i++) {
-    const id = coreModel.getParameterId(i);
-    // CubismId has a getString() method
-    const name = id?.getString?.() ?? id?.toString?.() ?? `param_${i}`;
-    map[name] = i;
-  }
-  return map;
-}
-
 export function Live2DAvatar({ metrics, lastEvent, modelFile }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
-  const modelRef = useRef<Live2DModel | null>(null);
-  const paramMapRef = useRef<ParamMap>({});
   const blinkRef = useRef({
     active: false,
     startTime: 0,
@@ -52,7 +23,7 @@ export function Live2DAvatar({ metrics, lastEvent, modelFile }: Props) {
   });
   const [error, setError] = useState<string | null>(null);
 
-  // Store metrics and lastEvent in refs so animation loop doesn't re-mount
+  // Store metrics and lastEvent in refs so callbacks read current values
   const metricsRef = useRef(metrics);
   const lastEventRef = useRef(lastEvent);
   metricsRef.current = metrics;
@@ -82,36 +53,111 @@ export function Live2DAvatar({ metrics, lastEvent, modelFile }: Props) {
       appRef.current = app;
 
       try {
-        const model = await Live2DModel.from(`/model/${modelFile}`);
+        const model = await Live2DModel.from(`/model/${modelFile}`, {
+          autoFocus: false,
+          autoHitTest: false,
+          ticker: app.ticker,
+          breathDepth: 0,
+        });
         if (cancelled) return;
 
-        console.log("Live2D model loaded:", {
-          modelWidth: model.width,
-          modelHeight: model.height,
-          canvasWidth: app.screen.width,
-          canvasHeight: app.screen.height,
-          containerSize: [container!.clientWidth, container!.clientHeight],
-        });
-
-        // Scale to fit canvas
+        // Scale to fit canvas using unscaled dimensions from internalModel
+        const im = (model as any).internalModel;
+        const origW = im?.originalWidth || model.width;
+        const origH = im?.originalHeight || model.height;
         const scale = Math.min(
-          app.screen.width / model.width,
-          app.screen.height / model.height,
+          app.screen.width / origW,
+          app.screen.height / origH,
         ) * 0.9;
         model.scale.set(scale);
-        model.x = (app.screen.width - model.width * scale) / 2;
-        model.y = (app.screen.height - model.height * scale) / 2;
-
-        console.log("Live2D positioning:", { scale, x: model.x, y: model.y });
+        model.x = (app.screen.width - origW * scale) / 2;
+        model.y = (app.screen.height - origH * scale) / 2;
 
         app.stage.addChild(model);
-        modelRef.current = model;
 
-        // Build parameter index map
-        const coreModel = (model as any).internalModel?.coreModel;
-        if (coreModel) {
-          paramMapRef.current = buildParamMap(coreModel);
-          console.log("Live2D params:", Object.keys(paramMapRef.current).join(", "));
+        const internalModel = (model as any).internalModel;
+        if (internalModel) {
+          // Disable built-in animations — we drive all params from Muse
+          internalModel.eyeBlink = null;
+          internalModel.motionManager.stopAllMotions();
+          internalModel.motionManager.update = () => false;
+
+          const cm = internalModel.coreModel;
+
+          // Resolve ALL param indices ourselves.
+          // The new library (Cubism 4/5) uses idParamAngleX (CubismIdHandle)
+          // instead of angleXParamIndex (number), so we can't rely on
+          // library-cached indices. Resolve by name for all Cubism versions.
+          const paramIndices: Record<string, number> = {};
+          const PARAM_NAMES = [
+            "ParamAngleX", "ParamAngleY", "ParamAngleZ",
+            "ParamBodyAngleX",
+            "ParamEyeBallX", "ParamEyeBallY",
+            "ParamEyeLOpen", "ParamEyeROpen",
+          ];
+          const paramCount = cm.getParameterCount();
+          for (let i = 0; i < paramCount; i++) {
+            const id = cm.getParameterId(i);
+            // Cubism 5: id may be { _id: { s: "Name" } } or plain string
+            const name = typeof id === "string" ? id
+              : id?._id?.s ?? id?.getString?.()?.s ?? id?.getString?.() ?? "";
+            if (PARAM_NAMES.includes(name)) {
+              paramIndices[name] = i;
+            }
+          }
+
+          // Override updateFocus to drive params from Muse data
+          internalModel.updateFocus = () => {
+            const m = metricsRef.current;
+            const evt = lastEventRef.current;
+
+            // Head angles from Muse IMU
+            if (m?.initialized && "ParamAngleX" in paramIndices) {
+              const { pitch, yaw, roll } = m.head_pose;
+              cm.setParameterValueByIndex(paramIndices.ParamAngleX, yaw);
+              cm.setParameterValueByIndex(paramIndices.ParamAngleY, pitch);
+              cm.setParameterValueByIndex(paramIndices.ParamAngleZ, roll);
+              if ("ParamBodyAngleX" in paramIndices) {
+                cm.setParameterValueByIndex(paramIndices.ParamBodyAngleX, yaw * 0.3);
+              }
+            }
+
+            // Blink animation from BCI events
+            const blink = blinkRef.current;
+            if (
+              evt?.kind === "blink" &&
+              !blink.active &&
+              evt !== blink.lastProcessedEvent
+            ) {
+              blink.active = true;
+              blink.startTime = performance.now();
+              blink.lastProcessedEvent = evt;
+            }
+
+            let eyeOpen = 1.0;
+            if (blink.active) {
+              const elapsed = performance.now() - blink.startTime;
+              if (elapsed < BLINK_CLOSE_MS) {
+                eyeOpen = 1.0 - elapsed / BLINK_CLOSE_MS;
+              } else if (elapsed < BLINK_CLOSE_MS + BLINK_OPEN_MS) {
+                eyeOpen = (elapsed - BLINK_CLOSE_MS) / BLINK_OPEN_MS;
+              } else {
+                eyeOpen = 1.0;
+                blink.active = false;
+              }
+            }
+
+            if ("ParamEyeBallX" in paramIndices) {
+              cm.setParameterValueByIndex(paramIndices.ParamEyeBallX, 0);
+              cm.setParameterValueByIndex(paramIndices.ParamEyeBallY, 0);
+            }
+            if ("ParamEyeLOpen" in paramIndices) {
+              cm.setParameterValueByIndex(paramIndices.ParamEyeLOpen, eyeOpen);
+            }
+            if ("ParamEyeROpen" in paramIndices) {
+              cm.setParameterValueByIndex(paramIndices.ParamEyeROpen, eyeOpen);
+            }
+          };
         }
       } catch (err) {
         console.error("Live2D model load failed:", err);
@@ -127,78 +173,8 @@ export function Live2DAvatar({ metrics, lastEvent, modelFile }: Props) {
         appRef.current.destroy(true);
         appRef.current = null;
       }
-      modelRef.current = null;
     };
   }, [modelFile]);
-
-  // Drive parameters from metrics + events (runs once, reads refs)
-  useEffect(() => {
-    let raf: number;
-
-    function animate() {
-      const model = modelRef.current;
-      const coreModel = (model as any)?.internalModel?.coreModel;
-      if (!coreModel) {
-        raf = requestAnimationFrame(animate);
-        return;
-      }
-
-      const pmap = paramMapRef.current;
-      const currentMetrics = metricsRef.current;
-      const currentEvent = lastEventRef.current;
-
-      // Head angles from metrics
-      if (currentMetrics?.initialized) {
-        const { pitch, yaw, roll } = currentMetrics.head_pose;
-        if (PARAM_ANGLE_X in pmap) {
-          coreModel.setParameterValueByIndex(pmap[PARAM_ANGLE_X], yaw);
-        }
-        if (PARAM_ANGLE_Y in pmap) {
-          coreModel.setParameterValueByIndex(pmap[PARAM_ANGLE_Y], pitch);
-        }
-        if (PARAM_ANGLE_Z in pmap) {
-          coreModel.setParameterValueByIndex(pmap[PARAM_ANGLE_Z], roll);
-        }
-      }
-
-      // Blink animation — track last processed event to avoid re-triggering
-      const blink = blinkRef.current;
-      if (
-        currentEvent?.kind === "blink" &&
-        !blink.active &&
-        currentEvent !== blink.lastProcessedEvent
-      ) {
-        blink.active = true;
-        blink.startTime = performance.now();
-        blink.lastProcessedEvent = currentEvent;
-      }
-
-      let eyeOpen = 1.0;
-      if (blink.active) {
-        const elapsed = performance.now() - blink.startTime;
-        if (elapsed < BLINK_CLOSE_MS) {
-          eyeOpen = 1.0 - elapsed / BLINK_CLOSE_MS;
-        } else if (elapsed < BLINK_CLOSE_MS + BLINK_OPEN_MS) {
-          eyeOpen = (elapsed - BLINK_CLOSE_MS) / BLINK_OPEN_MS;
-        } else {
-          eyeOpen = 1.0;
-          blink.active = false;
-        }
-      }
-
-      if (PARAM_EYE_L_OPEN in pmap) {
-        coreModel.setParameterValueByIndex(pmap[PARAM_EYE_L_OPEN], eyeOpen);
-      }
-      if (PARAM_EYE_R_OPEN in pmap) {
-        coreModel.setParameterValueByIndex(pmap[PARAM_EYE_R_OPEN], eyeOpen);
-      }
-
-      raf = requestAnimationFrame(animate);
-    }
-
-    raf = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(raf);
-  }, []);
 
   return (
     <div ref={containerRef} className="w-full h-full relative">

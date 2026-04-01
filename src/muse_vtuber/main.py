@@ -150,6 +150,20 @@ def run(config: AppConfig) -> None:
     last_slow = time.monotonic()
     last_sq: SignalQualityResult | None = None  # cache for UI broadcast
     eeg_buf: np.ndarray | None = None  # rolling buffer for SLOW stages
+    last_data_time = time.monotonic()  # watchdog: track last data received
+    stall_warned = False
+
+    # Head tracking sensitivity — Muse IMU outputs small yaw angles due
+    # to yaw decay (no magnetometer), scale up for Live2D/VTS range (±30)
+    YAW_SCALE = 4.0
+    PITCH_SCALE = 1.5
+    ROLL_SCALE = 1.0
+
+    # Blink animation state (mirrors frontend logic for VTS output)
+    BLINK_CLOSE_S = 0.05   # 50ms close
+    BLINK_OPEN_S = 0.10    # 100ms reopen
+    blink_active = False
+    blink_start = 0.0
 
     # Auto-detect model3.json filename for frontend
     model_file = ""
@@ -165,8 +179,19 @@ def run(config: AppConfig) -> None:
             imu = source.poll_imu()
 
             if eeg is None and imu is None:
+                # Watchdog: warn if no data for 5+ seconds
+                stall_duration = time.monotonic() - last_data_time
+                if stall_duration > 5.0 and not stall_warned:
+                    log.warning("No data received for %.1fs — BLE stall?", stall_duration)
+                    stall_warned = True
+                elif stall_duration > 5.0 and int(stall_duration) % 10 == 0:
+                    log.warning("Data stall ongoing: %.0fs", stall_duration)
                 time.sleep(poll_interval)
                 continue
+            last_data_time = time.monotonic()
+            if stall_warned:
+                log.info("Data flow resumed after stall")
+                stall_warned = False
 
             now = time.monotonic()
             frame = PipelineFrame(eeg=eeg, imu=imu, timestamp=now)
@@ -205,6 +230,21 @@ def run(config: AppConfig) -> None:
             # Extract and send blendshapes
             blendshapes = extract_blendshapes(frame)
 
+            # Blink animation (close→reopen over 150ms)
+            if blendshapes.blink > 0 and not blink_active:
+                blink_active = True
+                blink_start = now
+            eye_open: float | None = None
+            if blink_active:
+                elapsed = now - blink_start
+                if elapsed < BLINK_CLOSE_S:
+                    eye_open = 1.0 - elapsed / BLINK_CLOSE_S
+                elif elapsed < BLINK_CLOSE_S + BLINK_OPEN_S:
+                    eye_open = (elapsed - BLINK_CLOSE_S) / BLINK_OPEN_S
+                else:
+                    eye_open = 1.0
+                    blink_active = False
+
             if vmc_output:
                 vmc_output.send_frame(blendshapes=blendshapes, bones=bones)
 
@@ -214,12 +254,14 @@ def run(config: AppConfig) -> None:
                     "focus": blendshapes.focus,
                     "relaxation": blendshapes.relaxation,
                     "clench": blendshapes.clench,
+                    "eye_open": eye_open,
                 }
                 if head_pose and head_pose.initialized:
                     pitch, yaw, roll = head_pose.get_euler_degrees()
-                    vts_data["face_angle_x"] = pitch
-                    vts_data["face_angle_y"] = yaw
-                    vts_data["face_angle_z"] = roll
+                    # VTS: FaceAngleX=yaw, FaceAngleY=pitch, FaceAngleZ=roll
+                    vts_data["face_angle_x"] = yaw * YAW_SCALE
+                    vts_data["face_angle_y"] = pitch * PITCH_SCALE
+                    vts_data["face_angle_z"] = roll * ROLL_SCALE
                 try:
                     vts_queue.put_nowait(vts_data)
                 except queue.Full:
@@ -238,10 +280,13 @@ def run(config: AppConfig) -> None:
                 sq = frame.get(SignalQualityResult)
                 if sq is not None:
                     last_sq = sq
-                hp_pitch, hp_yaw, hp_roll = (
+                raw = (
                     head_pose.get_euler_degrees() if head_pose and head_pose.initialized
                     else (0.0, 0.0, 0.0)
                 )
+                hp_pitch = raw[0] * PITCH_SCALE
+                hp_yaw = raw[1] * YAW_SCALE
+                hp_roll = raw[2] * ROLL_SCALE
                 ui_server.broadcast_metrics({
                     "amplitude_quality": last_sq.amplitude_quality if last_sq else {},
                     "amplitude_fit": last_sq.amplitude_fit if last_sq else "unknown",
@@ -259,6 +304,12 @@ def run(config: AppConfig) -> None:
                     if cmd.get("type") == "recenter" and head_pose:
                         head_pose.recenter()
                         log.info("Recentered head pose (UI command)")
+                    elif cmd.get("type") == "set_sensitivity":
+                        YAW_SCALE = cmd.get("yaw", YAW_SCALE)
+                        PITCH_SCALE = cmd.get("pitch", PITCH_SCALE)
+                        ROLL_SCALE = cmd.get("roll", ROLL_SCALE)
+                        log.info("Set sensitivity: yaw=%.1f pitch=%.1f roll=%.1f",
+                                 YAW_SCALE, PITCH_SCALE, ROLL_SCALE)
                     elif cmd.get("type") == "set_bias" and head_pose:
                         head_pose.bias_pitch = cmd.get("pitch", 0.0)
                         head_pose.bias_yaw = cmd.get("yaw", 0.0)

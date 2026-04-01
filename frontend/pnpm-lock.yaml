@@ -14,9 +14,6 @@ importers:
       '@fontsource-variable/geist':
         specifier: ^5.2.8
         version: 5.2.8
-      '@naari3/pixi-live2d-display':
-        specifier: ^1.2.5
-        version: 1.2.5(pixi.js@8.17.1)
       '@tailwindcss/vite':
         specifier: ^4.2.2
         version: 4.2.2(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.0)(jiti@2.6.1))
@@ -53,6 +50,9 @@ importers:
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
+      untitled-pixi-live2d-engine:
+        specifier: ^1.0.1
+        version: 1.0.1(@pixi/sound@6.0.1(pixi.js@8.17.1))(pixi.js@8.17.1)
     devDependencies:
       '@types/node':
         specifier: ^25.5.0
@@ -337,11 +337,6 @@ packages:
     resolution: {integrity: sha512-cXu86tF4VQVfwz8W1SPbhoRyHJkti6mjH/XJIxp40jhO4j2k1m4KYrEykxqWPkFF3vrK4rgQppBh//AwyGSXPA==}
     engines: {node: '>=18'}
 
-  '@naari3/pixi-live2d-display@1.2.5':
-    resolution: {integrity: sha512-pRHT74NtUmWCGwE+zabEe5zAeZ2MTYtgsRnQwDg5ompj351+zLvwNc9GnVSrcHKHM3OSExV971R2A3S5IdFN3Q==}
-    peerDependencies:
-      pixi.js: ^8.0.0
-
   '@napi-rs/wasm-runtime@1.1.2':
     resolution: {integrity: sha512-sNXv5oLJ7ob93xkZ1XnxisYhGYXfaG9f65/ZgYuAu3qt7b3NadcOEhLvx28hv31PgX8SZJRYrAIPQilQmFpLVw==}
     peerDependencies:
@@ -386,6 +381,11 @@ packages:
 
   '@pixi/colord@2.9.6':
     resolution: {integrity: sha512-nezytU2pw587fQstUu1AsJZDVEynjskwOL+kibwcdxsMBFqPsFFNA7xl0ii/gXuDi6M0xj3mfRJj8pBSc2jCfA==}
+
+  '@pixi/sound@6.0.1':
+    resolution: {integrity: sha512-hpFlQSScAR2L/CsEoIvDi7s1oGsu8y9Zd742Vd3982N+q3IF2vFuIfV9HN4ryjlGnhCT8yBlEgs1gp4G9Rt9TA==}
+    peerDependencies:
+      pixi.js: ^8.0.0
 
   '@rolldown/binding-android-arm64@1.0.0-rc.12':
     resolution: {integrity: sha512-pv1y2Fv0JybcykuiiD3qBOBdz6RteYojRFY1d+b95WVuzx211CRh+ytI/+9iVyWQ6koTh5dawe4S/yRfOFjgaA==}
@@ -1824,6 +1824,12 @@ packages:
   until-async@3.0.2:
     resolution: {integrity: sha512-IiSk4HlzAMqTUseHHe3VhIGyuFmN90zMTpD3Z3y8jeQbzLIq500MVM7Jq2vUAnTKAFPJrqwkzr6PoTcPhGcOiw==}
 
+  untitled-pixi-live2d-engine@1.0.1:
+    resolution: {integrity: sha512-feTQ5Rd2+eGiaov2EgDS+a6WVWmSDSUxkKKTAKuM9QF3d0topuqsqHWXO/8i9E+/4m9l8R9vOvF9JLGdayfp3g==}
+    peerDependencies:
+      '@pixi/sound': ^6.0.1
+      pixi.js: ^8.13.1
+
   update-browserslist-db@1.2.3:
     resolution: {integrity: sha512-Js0m9cx+qOgDxo0eMiFGEueWztz+d4+M3rGlmKPT+T4IS/jP4ylw3Nwpu6cpTTP8R1MAC1kF4VbdLt3ARf209w==}
     hasBin: true
@@ -2296,10 +2302,6 @@ snapshots:
       outvariant: 1.4.3
       strict-event-emitter: 0.5.1
 
-  '@naari3/pixi-live2d-display@1.2.5(pixi.js@8.17.1)':
-    dependencies:
-      pixi.js: 8.17.1
-
   '@napi-rs/wasm-runtime@1.1.2(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)':
     dependencies:
       '@emnapi/core': 1.9.1
@@ -2339,6 +2341,10 @@ snapshots:
   '@oxc-project/types@0.122.0': {}
 
   '@pixi/colord@2.9.6': {}
+
+  '@pixi/sound@6.0.1(pixi.js@8.17.1)':
+    dependencies:
+      pixi.js: 8.17.1
 
   '@rolldown/binding-android-arm64@1.0.0-rc.12':
     optional: true
@@ -3641,6 +3647,11 @@ snapshots:
   unpipe@1.0.0: {}
 
   until-async@3.0.2: {}
+
+  untitled-pixi-live2d-engine@1.0.1(@pixi/sound@6.0.1(pixi.js@8.17.1))(pixi.js@8.17.1):
+    dependencies:
+      '@pixi/sound': 6.0.1(pixi.js@8.17.1)
+      pixi.js: 8.17.1
 
   update-browserslist-db@1.2.3(browserslist@4.28.2):
     dependencies:

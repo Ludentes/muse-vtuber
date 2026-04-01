@@ -25,6 +25,7 @@ const WS_URL = `ws://${window.location.hostname}:8765`;
 export function useMuseStream() {
   const [metrics, setMetrics] = useState<MuseMetrics | null>(null);
   const [lastEvent, setLastEvent] = useState<BciEvent | null>(null);
+  const [lastBlink, setLastBlink] = useState<BciEvent | null>(null);
   const lastEventTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const { readyState, sendJsonMessage } = useWebSocket(WS_URL, {
@@ -36,7 +37,11 @@ export function useMuseStream() {
           const { type: _, ...metricsData } = msg;
           setMetrics(metricsData as MuseMetrics);
         } else if (msg.type === "bci_event") {
-          setLastEvent({ kind: msg.kind, confidence: msg.confidence ?? 0 });
+          const evt = { kind: msg.kind, confidence: msg.confidence ?? 0 };
+          setLastEvent(evt);
+          if (msg.kind === "blink") {
+            setLastBlink(evt);
+          }
           // Clear event after 500ms so UI can flash
           clearTimeout(lastEventTimer.current);
           lastEventTimer.current = setTimeout(() => setLastEvent(null), 500);
@@ -57,6 +62,7 @@ export function useMuseStream() {
   return {
     metrics,
     lastEvent,
+    lastBlink,
     connected: readyState === ReadyState.OPEN,
     send,
   };

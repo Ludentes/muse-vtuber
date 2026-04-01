@@ -182,11 +182,13 @@ class VTSClient:
         face_angle_x: float | None = None,
         face_angle_y: float | None = None,
         face_angle_z: float | None = None,
+        eye_open: float | None = None,
     ) -> None:
         """Inject parameter values into VTube Studio.
 
         EEG params go to custom MuseXxx parameters.
         Head tracking angles go to built-in FaceAngleX/Y/Z (degrees).
+        Eye open goes to built-in EyeOpenLeft/Right (0=closed, 1=open).
         """
         if not self._authenticated or self._ws is None:
             return
@@ -202,6 +204,9 @@ class VTSClient:
             params.append(("FaceAngleY", face_angle_y))
         if face_angle_z is not None:
             params.append(("FaceAngleZ", face_angle_z))
+        if eye_open is not None:
+            params.append(("EyeOpenLeft", eye_open))
+            params.append(("EyeOpenRight", eye_open))
         msg = build_parameter_injection_request(params)
         try:
             await self._ws.send(msg)
