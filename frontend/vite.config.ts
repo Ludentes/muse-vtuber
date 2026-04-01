@@ -13,7 +13,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/ws': { target: 'ws://localhost:8765', ws: true },
-      '/model': { target: 'http://localhost:8766' },
+      '/model': { target: 'http://localhost:8766', rewrite: (path) => path.replace(/^\/model/, '') },
     }
   }
 })
