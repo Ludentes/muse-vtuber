@@ -5,8 +5,10 @@ import reactUseWebSocket, { ReadyState } from "react-use-websocket";
 const useWebSocket = (reactUseWebSocket as any).default ?? reactUseWebSocket;
 
 export interface MuseMetrics {
-  signal_quality: Record<string, number>;
-  fit_status: "good" | "adjust" | "poor" | "unknown";
+  amplitude_quality: Record<string, number>;
+  amplitude_fit: "good" | "adjust" | "poor" | "unknown";
+  psd_quality: Record<string, number>;
+  psd_fit: "good" | "adjust" | "poor" | "unknown";
   head_pose: { pitch: number; yaw: number; roll: number };
   settle_progress: number;
   initialized: boolean;

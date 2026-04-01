@@ -18,8 +18,10 @@ function App() {
         </div>
 
         <SignalQuality
-          signalQuality={metrics?.signal_quality}
-          fitStatus={metrics?.fit_status}
+          amplitudeQuality={metrics?.amplitude_quality}
+          amplitudeFit={metrics?.amplitude_fit}
+          psdQuality={metrics?.psd_quality}
+          psdFit={metrics?.psd_fit}
         />
 
         {/* Head pose readout */}

@@ -243,8 +243,10 @@ def run(config: AppConfig) -> None:
                     else (0.0, 0.0, 0.0)
                 )
                 ui_server.broadcast_metrics({
-                    "signal_quality": last_sq.channel_quality if last_sq else {},
-                    "fit_status": last_sq.fit_status if last_sq else "unknown",
+                    "amplitude_quality": last_sq.amplitude_quality if last_sq else {},
+                    "amplitude_fit": last_sq.amplitude_fit if last_sq else "unknown",
+                    "psd_quality": last_sq.psd_quality if last_sq else {},
+                    "psd_fit": last_sq.psd_fit if last_sq else "unknown",
                     "head_pose": {"pitch": hp_pitch, "yaw": hp_yaw, "roll": hp_roll},
                     "settle_progress": head_pose.settle_progress if head_pose else 0,
                     "initialized": head_pose.initialized if head_pose else False,
