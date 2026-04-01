@@ -103,7 +103,39 @@ class SetupUIServer:
 
 
 class _CORSHandler(SimpleHTTPRequestHandler):
-    """Static file handler with CORS headers for Vite dev proxy."""
+    """Static file handler with CORS headers for Vite dev proxy.
+
+    Patches .model3.json files to inject HitAreas:[] if missing,
+    working around a bug in pixi-live2d-display where setupHitAreas()
+    crashes on models without hit area definitions.
+    """
+
+    def do_GET(self) -> None:
+        # Intercept .model3.json to patch missing HitAreas
+        if self.path.endswith(".model3.json"):
+            self._serve_patched_model3()
+        else:
+            super().do_GET()
+
+    def _serve_patched_model3(self) -> None:
+        path = self.translate_path(self.path)
+        try:
+            with open(path, "r") as f:
+                data = json.loads(f.read())
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.send_error(404)
+            return
+
+        if "HitAreas" not in data:
+            data["HitAreas"] = []
+            log.info("Patched %s: injected empty HitAreas", self.path)
+
+        body = json.dumps(data).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def end_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
