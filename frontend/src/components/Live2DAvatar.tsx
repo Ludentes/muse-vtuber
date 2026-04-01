@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import * as PIXI from "pixi.js";
 import { Application } from "pixi.js";
 import { Live2DModel } from "@naari3/pixi-live2d-display";
 import type { MuseMetrics, BciEvent } from "../hooks/useMuseStream";
+
+// pixi-live2d-display requires window.PIXI for Ticker access (PixiJS v8 doesn't set this)
+(window as any).PIXI = PIXI;
 
 // Live2D parameter names
 const PARAM_ANGLE_X = "ParamAngleX";
@@ -81,6 +85,14 @@ export function Live2DAvatar({ metrics, lastEvent, modelFile }: Props) {
         const model = await Live2DModel.from(`/model/${modelFile}`);
         if (cancelled) return;
 
+        console.log("Live2D model loaded:", {
+          modelWidth: model.width,
+          modelHeight: model.height,
+          canvasWidth: app.screen.width,
+          canvasHeight: app.screen.height,
+          containerSize: [container!.clientWidth, container!.clientHeight],
+        });
+
         // Scale to fit canvas
         const scale = Math.min(
           app.screen.width / model.width,
@@ -90,6 +102,8 @@ export function Live2DAvatar({ metrics, lastEvent, modelFile }: Props) {
         model.x = (app.screen.width - model.width * scale) / 2;
         model.y = (app.screen.height - model.height * scale) / 2;
 
+        console.log("Live2D positioning:", { scale, x: model.x, y: model.y });
+
         app.stage.addChild(model);
         modelRef.current = model;
 
@@ -97,6 +111,7 @@ export function Live2DAvatar({ metrics, lastEvent, modelFile }: Props) {
         const coreModel = (model as any).internalModel?.coreModel;
         if (coreModel) {
           paramMapRef.current = buildParamMap(coreModel);
+          console.log("Live2D params:", Object.keys(paramMapRef.current).join(", "));
         }
       } catch (err) {
         console.error("Live2D model load failed:", err);
