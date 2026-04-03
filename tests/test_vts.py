@@ -47,9 +47,23 @@ def test_parameter_injection_format():
 
 
 def test_parameter_injection_weight():
-    """Weight field controls blending with face tracking."""
-    params = [("MuseBlink", 1.0)]
-    msg = build_parameter_injection_request(params, weight=0.5)
+    """Per-parameter weight controls blending with VTS face tracking."""
+    params = [("FaceAngleX", 15.0), ("MuseBlink", 1.0)]
+    msg = build_parameter_injection_request(params, weights={"FaceAngleX": 0.5})
     data = json.loads(msg)
     values = data["data"]["parameterValues"]
-    assert values[0]["weight"] == 0.5
+    # FaceAngleX gets weight=0.5
+    face_entry = next(v for v in values if v["id"] == "FaceAngleX")
+    assert face_entry["weight"] == 0.5
+    # MuseBlink omits weight (camera never drives custom params)
+    blink_entry = next(v for v in values if v["id"] == "MuseBlink")
+    assert "weight" not in blink_entry
+
+
+def test_parameter_injection_weight_1_omitted():
+    """weight=1.0 entries omit the weight field (VTS default)."""
+    params = [("FaceAngleX", 15.0)]
+    msg = build_parameter_injection_request(params, weights={"FaceAngleX": 1.0})
+    data = json.loads(msg)
+    values = data["data"]["parameterValues"]
+    assert "weight" not in values[0]

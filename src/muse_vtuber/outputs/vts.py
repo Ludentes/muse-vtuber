@@ -30,7 +30,7 @@ _TOKEN_PATH = Path.home() / ".config" / "muse-vtuber" / "vts_token.txt"
 
 
 def _request(message_type: str, data: dict | None = None) -> str:
-    msg = {
+    msg: dict[str, object] = {
         "apiName": _API_NAME,
         "apiVersion": _API_VERSION,
         "requestID": message_type,
@@ -70,13 +70,20 @@ def build_parameter_creation_request(
 
 def build_parameter_injection_request(
     params: list[tuple[str, float]],
-    weight: float = 1.0,
+    weights: dict[str, float] | None = None,
 ) -> str:
+    """Build a VTS parameter injection request.
+
+    weights: optional per-parameter weight map. If a param name is present,
+    that weight is included in the entry. Omitted weights default to 1.0 in VTS
+    (full plugin override). Use weight < 1.0 to blend with camera tracking:
+        Final = (plugin_value × weight) + (camera_value × (1 - weight))
+    """
     values = []
     for name, value in params:
         entry: dict = {"id": name, "value": value}
-        if weight != 1.0:
-            entry["weight"] = weight
+        if weights and name in weights and weights[name] != 1.0:
+            entry["weight"] = weights[name]
         values.append(entry)
     return _request("InjectParameterDataRequest", {
         "parameterValues": values,
@@ -183,31 +190,45 @@ class VTSClient:
         face_angle_y: float | None = None,
         face_angle_z: float | None = None,
         eye_open: float | None = None,
+        head_tracking_weight: float = 1.0,
     ) -> None:
         """Inject parameter values into VTube Studio.
 
-        EEG params go to custom MuseXxx parameters.
+        EEG params go to custom MuseXxx parameters (always weight=1.0, camera
+        never drives these so blending is irrelevant).
         Head tracking angles go to built-in FaceAngleX/Y/Z (degrees).
         Eye open goes to built-in EyeOpenLeft/Right (0=closed, 1=open).
+
+        head_tracking_weight controls blending with VTS camera tracking for
+        FaceAngle and EyeOpen params:
+            Final = (our_value × weight) + (camera_value × (1 - weight))
+        weight=1.0 (default): full IMU override, camera tracking suppressed.
+        weight=0.0: camera tracking drives head pose, our values ignored.
         """
         if not self._authenticated or self._ws is None:
             return
-        params = [
+        params: list[tuple[str, float]] = [
             ("MuseBlink", blink),
             ("MuseFocus", focus),
             ("MuseRelaxation", relaxation),
             ("MuseClench", clench),
         ]
+        head_params: list[str] = []
         if face_angle_x is not None:
             params.append(("FaceAngleX", face_angle_x))
+            head_params.append("FaceAngleX")
         if face_angle_y is not None:
             params.append(("FaceAngleY", face_angle_y))
+            head_params.append("FaceAngleY")
         if face_angle_z is not None:
             params.append(("FaceAngleZ", face_angle_z))
+            head_params.append("FaceAngleZ")
         if eye_open is not None:
             params.append(("EyeOpenLeft", eye_open))
             params.append(("EyeOpenRight", eye_open))
-        msg = build_parameter_injection_request(params)
+            head_params += ["EyeOpenLeft", "EyeOpenRight"]
+        weights = {name: head_tracking_weight for name in head_params} if head_tracking_weight != 1.0 else None
+        msg = build_parameter_injection_request(params, weights=weights)
         try:
             await self._ws.send(msg)
         except Exception as e:
