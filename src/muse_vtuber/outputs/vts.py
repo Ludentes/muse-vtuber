@@ -190,7 +190,8 @@ class VTSClient:
         face_angle_y: float | None = None,
         face_angle_z: float | None = None,
         eye_open: float | None = None,
-        head_tracking_weight: float = 1.0,
+        head_angle_weight: float = 1.0,
+        eye_open_weight: float = 1.0,
     ) -> None:
         """Inject parameter values into VTube Studio.
 
@@ -199,11 +200,11 @@ class VTSClient:
         Head tracking angles go to built-in FaceAngleX/Y/Z (degrees).
         Eye open goes to built-in EyeOpenLeft/Right (0=closed, 1=open).
 
-        head_tracking_weight controls blending with VTS camera tracking for
-        FaceAngle and EyeOpen params:
+        head_angle_weight / eye_open_weight control blending with VTS camera
+        tracking separately for each group:
             Final = (our_value × weight) + (camera_value × (1 - weight))
         weight=1.0 (default): full IMU override, camera tracking suppressed.
-        weight=0.0: camera tracking drives head pose, our values ignored.
+        weight=0.0: camera tracking drives that group, our values ignored.
         """
         if not self._authenticated or self._ws is None:
             return
@@ -213,22 +214,26 @@ class VTSClient:
             ("MuseRelaxation", relaxation),
             ("MuseClench", clench),
         ]
-        head_params: list[str] = []
+        weights: dict[str, float] = {}
         if face_angle_x is not None:
             params.append(("FaceAngleX", face_angle_x))
-            head_params.append("FaceAngleX")
+            if head_angle_weight != 1.0:
+                weights["FaceAngleX"] = head_angle_weight
         if face_angle_y is not None:
             params.append(("FaceAngleY", face_angle_y))
-            head_params.append("FaceAngleY")
+            if head_angle_weight != 1.0:
+                weights["FaceAngleY"] = head_angle_weight
         if face_angle_z is not None:
             params.append(("FaceAngleZ", face_angle_z))
-            head_params.append("FaceAngleZ")
+            if head_angle_weight != 1.0:
+                weights["FaceAngleZ"] = head_angle_weight
         if eye_open is not None:
             params.append(("EyeOpenLeft", eye_open))
             params.append(("EyeOpenRight", eye_open))
-            head_params += ["EyeOpenLeft", "EyeOpenRight"]
-        weights = {name: head_tracking_weight for name in head_params} if head_tracking_weight != 1.0 else None
-        msg = build_parameter_injection_request(params, weights=weights)
+            if eye_open_weight != 1.0:
+                weights["EyeOpenLeft"] = eye_open_weight
+                weights["EyeOpenRight"] = eye_open_weight
+        msg = build_parameter_injection_request(params, weights=weights or None)
         try:
             await self._ws.send(msg)
         except Exception as e:

@@ -159,11 +159,11 @@ def run(config: AppConfig) -> None:
     PITCH_SCALE = 1.5
     ROLL_SCALE = 1.0
 
-    # VTS head tracking blend weight (FaceAngle / EyeOpen params only).
-    # 1.0 = full IMU override (camera tracking suppressed for those params)
-    # 0.0 = camera tracking drives head pose (our values ignored)
-    # In between: Final = (IMU × weight) + (camera × (1 - weight))
-    VTS_HEAD_WEIGHT = 1.0
+    # VTS blend weights — how much our values override VTS camera tracking.
+    # 1.0 = full IMU override · 0.0 = camera drives that group
+    # Final = (our_value × weight) + (camera_value × (1 - weight))
+    VTS_ANGLE_WEIGHT = 1.0   # FaceAngleX/Y/Z (head pose)
+    VTS_EYE_WEIGHT = 1.0     # EyeOpenLeft/Right (blink animation)
 
     # Blink animation state (mirrors frontend logic for VTS output)
     BLINK_CLOSE_S = 0.05   # 50ms close
@@ -261,7 +261,8 @@ def run(config: AppConfig) -> None:
                     "relaxation": blendshapes.relaxation,
                     "clench": blendshapes.clench,
                     "eye_open": eye_open,
-                    "head_tracking_weight": VTS_HEAD_WEIGHT,
+                    "head_angle_weight": VTS_ANGLE_WEIGHT,
+                    "eye_open_weight": VTS_EYE_WEIGHT,
                 }
                 if head_pose and head_pose.initialized:
                     pitch, yaw, roll = head_pose.get_euler_degrees()
@@ -318,8 +319,10 @@ def run(config: AppConfig) -> None:
                         log.info("Set sensitivity: yaw=%.1f pitch=%.1f roll=%.1f",
                                  YAW_SCALE, PITCH_SCALE, ROLL_SCALE)
                     elif cmd.get("type") == "set_vts_weight":
-                        VTS_HEAD_WEIGHT = float(cmd.get("weight", VTS_HEAD_WEIGHT))
-                        log.info("Set VTS head tracking weight: %.2f", VTS_HEAD_WEIGHT)
+                        VTS_ANGLE_WEIGHT = float(cmd.get("angle", VTS_ANGLE_WEIGHT))
+                        VTS_EYE_WEIGHT = float(cmd.get("eye", VTS_EYE_WEIGHT))
+                        log.info("Set VTS weights: angle=%.2f eye=%.2f",
+                                 VTS_ANGLE_WEIGHT, VTS_EYE_WEIGHT)
                     elif cmd.get("type") == "set_bias" and head_pose:
                         head_pose.bias_pitch = cmd.get("pitch", 0.0)
                         head_pose.bias_yaw = cmd.get("yaw", 0.0)

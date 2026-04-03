@@ -33,15 +33,17 @@ function SensSlider({
 }
 
 function WeightSlider({
+  label,
   value,
   onChange,
 }: {
+  label: string;
   value: number;
   onChange: (v: number) => void;
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] font-mono w-8 text-muted-foreground uppercase">VTS</span>
+      <span className="text-[10px] font-mono w-8 text-muted-foreground uppercase">{label}</span>
       <Slider
         min={0}
         max={1}
@@ -61,7 +63,8 @@ export function SensitivityControls({ send }: Props) {
   const [yaw, setYaw] = useState(4.0);
   const [pitch, setPitch] = useState(1.5);
   const [roll, setRoll] = useState(1.0);
-  const [vtsWeight, setVtsWeight] = useState(1.0);
+  const [angleWeight, setAngleWeight] = useState(1.0);
+  const [eyeWeight, setEyeWeight] = useState(1.0);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -72,8 +75,8 @@ export function SensitivityControls({ send }: Props) {
   const weightMounted = useRef(false);
   useEffect(() => {
     if (!weightMounted.current) { weightMounted.current = true; return; }
-    send({ type: "set_vts_weight", weight: vtsWeight });
-  }, [vtsWeight, send]);
+    send({ type: "set_vts_weight", angle: angleWeight, eye: eyeWeight });
+  }, [angleWeight, eyeWeight, send]);
 
   return (
     <div className="space-y-2">
@@ -89,9 +92,10 @@ export function SensitivityControls({ send }: Props) {
         Head Override
       </span>
       <div className="space-y-1.5">
-        <WeightSlider value={vtsWeight} onChange={setVtsWeight} />
+        <WeightSlider label="Pose" value={angleWeight} onChange={setAngleWeight} />
+        <WeightSlider label="Eyes" value={eyeWeight} onChange={setEyeWeight} />
         <div className="text-[9px] text-muted-foreground leading-tight">
-          1.0 = IMU controls head · 0.0 = camera controls head
+          1.0 = IMU · 0.0 = camera
         </div>
       </div>
     </div>
