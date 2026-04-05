@@ -55,6 +55,21 @@ class AppConfig:
     ui_port: int = 8765
     model_path: str = ""
 
+    # Face tracking (portrait-to-live2d MLP → VTS)
+    face_tracking_enabled: bool = False
+    face_tracking_checkpoint: str = ""   # path to .pt checkpoint
+    face_tracking_model3: str = ""       # path to .model3.json (for param IDs)
+    face_tracking_camera: int = 0
+
+    # OBS ambient effects (EEG → Color Correction filter)
+    obs_enabled: bool = False
+    obs_host: str = "localhost"
+    obs_port: int = 4455
+    obs_password: str = ""
+    obs_source: str = "EEG_Overlay"
+    obs_filter: str = "EEG_Ambient"
+    eeg_ws_url: str = "ws://localhost:8765"
+
     # Debug
     debug: bool = False
 
@@ -136,6 +151,12 @@ def parse_cli_args(args: list[str] | None = None) -> AppConfig:
     parser.add_argument("--ui-port", type=int, help="Setup UI WebSocket port")
     parser.add_argument("--model", type=str, help="Path to Live2D model folder")
     parser.add_argument("--debug", action="store_true", help="Debug logging")
+    parser.add_argument("--face-tracking", action="store_true", help="Enable face tracking → VTS")
+    parser.add_argument("--face-checkpoint", type=str, help="Path to MLP .pt checkpoint")
+    parser.add_argument("--face-model3", type=str, help="Path to .model3.json for param IDs")
+    parser.add_argument("--face-camera", type=int, default=None, help="Webcam index (default 0)")
+    parser.add_argument("--obs", action="store_true", help="Enable EEG → OBS ambient effects")
+    parser.add_argument("--obs-port", type=int, help="OBS WebSocket port (default 4455)")
     parsed = parser.parse_args(args)
 
     cfg = load_config(parsed.config)
@@ -164,5 +185,17 @@ def parse_cli_args(args: list[str] | None = None) -> AppConfig:
         cfg.model_path = parsed.model
     if parsed.debug:
         cfg.debug = True
+    if parsed.face_tracking:
+        cfg.face_tracking_enabled = True
+    if parsed.face_checkpoint:
+        cfg.face_tracking_checkpoint = parsed.face_checkpoint
+    if parsed.face_model3:
+        cfg.face_tracking_model3 = parsed.face_model3
+    if parsed.face_camera is not None:
+        cfg.face_tracking_camera = parsed.face_camera
+    if parsed.obs:
+        cfg.obs_enabled = True
+    if parsed.obs_port:
+        cfg.obs_port = parsed.obs_port
 
     return cfg

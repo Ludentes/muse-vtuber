@@ -131,6 +131,63 @@ def run(config: AppConfig) -> None:
         vts_thread = threading.Thread(target=_vts_thread, daemon=True)
         vts_thread.start()
 
+    # Face tracking → VTS (async, runs in thread)
+    if config.face_tracking_enabled:
+        from pathlib import Path
+        from muse_vtuber.mlp.infer import Predictor
+        from muse_vtuber.outputs.face_params import run as run_face_params
+
+        ckpt = Path(config.face_tracking_checkpoint)
+        model3 = Path(config.face_tracking_model3)
+        if not ckpt.exists():
+            log.warning("Face tracking checkpoint not found: %s — skipping", ckpt)
+        elif not model3.exists():
+            log.warning("model3.json not found: %s — skipping", model3)
+        else:
+            face_predictor = Predictor.from_model3(ckpt, model3)
+            log.info(
+                "Face tracking MLP loaded — %d params, %.1fms/inference",
+                len(face_predictor._param_ids),
+                face_predictor.benchmark(n=50),
+            )
+
+            def _face_thread() -> None:
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(
+                    run_face_params(
+                        predictor=face_predictor,
+                        camera_index=config.face_tracking_camera,
+                        vts_port=config.vts_port,
+                    )
+                )
+
+            threading.Thread(target=_face_thread, daemon=True).start()
+            log.info("Face tracking thread started (camera %d)", config.face_tracking_camera)
+
+    # OBS ambient effects (async, runs in thread)
+    if config.obs_enabled:
+        from muse_vtuber.outputs.obs import ObsBridge
+
+        obs_bridge = ObsBridge(
+            eeg_url=config.eeg_ws_url,
+            obs_host=config.obs_host,
+            obs_port=config.obs_port,
+            obs_password=config.obs_password,
+            source=config.obs_source,
+            filter_name=config.obs_filter,
+        )
+
+        def _obs_thread() -> None:
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(obs_bridge.run())
+
+        threading.Thread(target=_obs_thread, daemon=True).start()
+        log.info("OBS ambient effects thread started")
+
     # Graceful shutdown
     running = True
 
