@@ -1,15 +1,16 @@
-"""CartoonAlive MLP — landmarks → Live2D parameters.
+"""CartoonAlive MLP — features → Live2D parameters.
 
-Architecture (matches hiyori_v2 checkpoint):
-  InputNorm(956)
-  Linear(956→512) + LayerNorm(512) + GELU
+Architecture:
+  InputNorm(input_dim)
+  Linear(input_dim→512) + LayerNorm(512) + GELU
   Linear(512→256) + LayerNorm(256) + GELU  +  skip Linear(512→256)
   Linear(256→128) + LayerNorm(128) + GELU
   Linear(128→N)
   OutputDenorm(N)
 
-Input: 478 MediaPipe FaceMesh landmarks flattened to (x, y) → 956-d vector.
-Output: N Live2D parameter values in rig_config.param_ids order.
+Supports two checkpoint flavours:
+  - humanoid-anime-bs58: input_dim=58 (52 blendshapes + 6 pose), N=13 generic params
+  - hiyori_v2 (legacy): input_dim=956 (478 landmarks × 2), N=74 Hiyori params
 """
 from __future__ import annotations
 
@@ -36,11 +37,11 @@ class _Norm(nn.Module):
 class CartoonAliveMLP(nn.Module):
     """4-layer MLP with one residual skip connection."""
 
-    def __init__(self, n_params: int) -> None:
+    def __init__(self, n_params: int, input_dim: int = 956) -> None:
         super().__init__()
-        self.input_norm = _Norm(956)
+        self.input_norm = _Norm(input_dim)
 
-        self.fc1 = nn.Linear(956, 512)
+        self.fc1 = nn.Linear(input_dim, 512)
         self.ln1 = nn.LayerNorm(512)
 
         self.fc2 = nn.Linear(512, 256)

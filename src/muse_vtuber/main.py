@@ -138,16 +138,24 @@ def run(config: AppConfig) -> None:
         from muse_vtuber.outputs.face_params import run as run_face_params
 
         ckpt = Path(config.face_tracking_checkpoint)
-        model3 = Path(config.face_tracking_model3)
         if not ckpt.exists():
             log.warning("Face tracking checkpoint not found: %s — skipping", ckpt)
-        elif not model3.exists():
-            log.warning("model3.json not found: %s — skipping", model3)
         else:
-            face_predictor = Predictor.from_model3(ckpt, model3)
+            # Self-describing checkpoint (humanoid-anime-bs58): no model3 needed.
+            # Legacy plain state_dict (hiyori_v2): requires --face-model3.
+            if config.face_tracking_model3:
+                face_predictor = Predictor.from_model3(ckpt, Path(config.face_tracking_model3))
+            else:
+                face_predictor = Predictor(ckpt)
+
+            landmarker_path = (
+                Path(config.face_tracking_landmarker)
+                if config.face_tracking_landmarker else None
+            )
             log.info(
-                "Face tracking MLP loaded — %d params, %.1fms/inference",
+                "Face tracking MLP loaded — %d params (input_dim=%d), %.1fms/inference",
                 len(face_predictor._param_ids),
+                face_predictor._input_dim,
                 face_predictor.benchmark(n=50),
             )
 
@@ -160,6 +168,7 @@ def run(config: AppConfig) -> None:
                         predictor=face_predictor,
                         camera_index=config.face_tracking_camera,
                         vts_port=config.vts_port,
+                        landmarker_model=landmarker_path,
                     )
                 )
 

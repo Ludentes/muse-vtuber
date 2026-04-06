@@ -57,8 +57,9 @@ class AppConfig:
 
     # Face tracking (portrait-to-live2d MLP → VTS)
     face_tracking_enabled: bool = False
-    face_tracking_checkpoint: str = ""   # path to .pt checkpoint
-    face_tracking_model3: str = ""       # path to .model3.json (for param IDs)
+    face_tracking_checkpoint: str = ""       # path to .pt checkpoint
+    face_tracking_landmarker: str = ""       # path to face_landmarker.task (optional, uses ~/.cache default)
+    face_tracking_model3: str = ""           # path to .model3.json (legacy hiyori_v2 only)
     face_tracking_camera: int = 0
 
     # OBS ambient effects (EEG → Color Correction filter)
@@ -153,7 +154,8 @@ def parse_cli_args(args: list[str] | None = None) -> AppConfig:
     parser.add_argument("--debug", action="store_true", help="Debug logging")
     parser.add_argument("--face-tracking", action="store_true", help="Enable face tracking → VTS")
     parser.add_argument("--face-checkpoint", type=str, help="Path to MLP .pt checkpoint")
-    parser.add_argument("--face-model3", type=str, help="Path to .model3.json for param IDs")
+    parser.add_argument("--face-landmarker", type=str, help="Path to face_landmarker.task (uses ~/.cache default if omitted)")
+    parser.add_argument("--face-model3", type=str, help="Path to .model3.json for param IDs (legacy checkpoints only)")
     parser.add_argument("--face-camera", type=int, default=None, help="Webcam index (default 0)")
     parser.add_argument("--obs", action="store_true", help="Enable EEG → OBS ambient effects")
     parser.add_argument("--obs-port", type=int, help="OBS WebSocket port (default 4455)")
@@ -189,6 +191,8 @@ def parse_cli_args(args: list[str] | None = None) -> AppConfig:
         cfg.face_tracking_enabled = True
     if parsed.face_checkpoint:
         cfg.face_tracking_checkpoint = parsed.face_checkpoint
+    if parsed.face_landmarker:
+        cfg.face_tracking_landmarker = parsed.face_landmarker
     if parsed.face_model3:
         cfg.face_tracking_model3 = parsed.face_model3
     if parsed.face_camera is not None:
