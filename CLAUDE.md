@@ -52,6 +52,49 @@ uv run pytest -v
 - Synthetic board (`-1`) has EEG but no IMU preset
 - Muse 2 IMU is AUXILIARY_PRESET, not DEFAULT_PRESET
 
+## Operating Modes
+
+muse-vtuber works with any Live2D model in two modes:
+
+### Standard mode (existing / commissioned rig)
+VTube Studio handles face tracking natively (iPhone TrueDepth recommended).
+muse-vtuber adds BCI params only — no `--face-tracking` flag.
+
+```
+Muse 2 → muse-vtuber ──── MuseBlink/MuseClench/MuseFocus/MuseRelaxation ──→ VTS
+iPhone  → VTS native  ──── AngleX/Y/Z, EyeLOpen, MouthOpenY, … ──────────→ VTS
+```
+
+### P2L mode (portrait-to-live2d generated rig)
+VTS still renders the model, but VTS face tracking can only drive ~15 standard
+params. The generated rig has 74–107 params; the CartoonAlive MLP drives all
+face-derived ones. muse-vtuber runs both in parallel.
+
+```
+Webcam → FaceLandmarker → MLP ─── all N face params ──────────────────────→ VTS
+Muse 2 → muse-vtuber ──────────── MuseBlink/MuseClench/MuseFocus/… ───────→ VTS
+```
+
+Activate with: `--face-tracking --face-checkpoint path/to/model.pt`
+
+The checkpoint is produced by portrait-to-live2d (offline, run once).
+The MLP is self-describing: param names and input_dim are embedded in the .pt file.
+
+## BCI Parameter Contract
+
+These are the VTS custom parameters muse-vtuber creates and drives:
+
+| Parameter | Range | Source | Notes |
+|---|---|---|---|
+| MuseBlink | 0–1 | EEG (blink detection) | 1.0 on blink event |
+| MuseClench | 0–1 | EEG (jaw EMG) | 1.0 on jaw clench |
+| MuseFocus | 0–1 | EEG theta/beta ratio | Smooth, ~1s lag |
+| MuseRelaxation | 0–1 | EEG alpha power | Smooth, ~1s lag |
+
+For P2L-generated rigs: these param names must be baked into the rig and wired
+to deformers in Cubism Editor. For standard rigs: they appear in VTS custom params
+panel and can be mapped manually in Model Settings.
+
 ## Architecture
 
 ```
@@ -63,6 +106,12 @@ BrainFlowSource (poll thread)
     → HeadPoseEstimator (IMU → quaternion)
     → ComplementaryFusion (optional, IMU + OpenSeeFace webcam)
     → Output sinks: VMC (UDP), VRChat OSC (UDP), VTube Studio (WebSocket)
+
+Optional face tracking thread (P2L mode):
+    Webcam → FaceLandmarker → CartoonAlive MLP → VTS InjectParameterData
+    src/muse_vtuber/outputs/face_tracking.py  (FaceLandmarker → 58-d features)
+    src/muse_vtuber/outputs/face_params.py    (MLP → VTS, calibration + smoothing)
+    src/muse_vtuber/mlp/                      (model.py + infer.py, no P2L dep)
 ```
 
 ## Ported From zyphraexps
