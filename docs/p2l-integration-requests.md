@@ -3,6 +3,21 @@
 Requested changes to the `portrait-to-live2d` repo based on architecture
 decisions made in muse-vtuber scope (2026-04-05).
 
+## Independence principle
+
+Both projects are independently useful and have no hard dependency on each other:
+
+- **P2L** generates rigs for any use case — VTubing, games, web, animation.
+  BCI integration is optional. A user with no Muse headband gets a fully working rig.
+
+- **muse-vtuber** works with any Live2D rig loaded in VTS — existing commissioned
+  models, Hiyori, HaiMeng, whatever. BCI params are injected as VTS custom params
+  regardless of whether the rig has pre-wired deformers. The rig doesn't need to
+  come from P2L.
+
+The sections below describe optional enhancements that make the two work better
+together when both are used. None are hard requirements.
+
 ---
 
 ## 1. Scope clarification: P2L is generation-only
@@ -34,38 +49,39 @@ to `docs/integration/` as reference (not P2L requirements).
 
 ---
 
-## 2. External parameter slots (Category C)
+## 2. External parameter slots — optional enhancement (Category C)
 
 The MLP parameter strategy already defines Category C params:
 > "Manually Controlled / BCI — fix at default during generation,
 >  injected at runtime by external sources."
 
-**Request:** make Category C configurable at generation time, not hardcoded.
+**Default behaviour (no change needed):** P2L generates a rig with only MLP-driven
+and physics params. Works perfectly for non-BCI use cases.
 
-A generation config (e.g. `generation.toml`) should accept an `[external_params]`
-section that lists params to bake into the generated rig but exclude from MLP
-training targets:
+**Enhancement:** a generation config (e.g. `generation.toml`) could accept an
+optional `[external_params]` section listing additional params to bake into the
+rig but exclude from MLP training targets:
 
 ```toml
 [external_params]
-# These are baked into the rig as named parameters.
-# The MLP holds them at their default values during data generation.
-# At runtime, muse-vtuber injects live values for these.
+# Optional. Baked into the rig as named parameters.
+# MLP holds them at default during data generation.
+# At runtime, any external driver (muse-vtuber or other) injects live values.
 MuseBlink      = { range = [0.0, 1.0], default = 0.0 }
 MuseClench     = { range = [0.0, 1.0], default = 0.0 }
 MuseFocus      = { range = [0.0, 1.0], default = 0.0 }
 MuseRelaxation = { range = [0.0, 1.0], default = 0.0 }
 ```
 
-This allows the rig author to decide which external drivers will be used at
-stream time without modifying code. The BCI defaults above are the muse-vtuber
-standard contract, but any external param source can be added here.
+**Why bother if muse-vtuber works without it:**
+muse-vtuber injects BCI params via VTS custom params API — they appear in VTS
+regardless of whether the rig declares them. The enhancement is specifically for
+Cubism Editor: if the param names exist in the `.model3.json` at rigging time,
+the rigger can wire deformers to them. Without pre-baking, a BCI user would need
+to open the rig in Cubism, add the params manually, re-export — extra work.
 
-**Why this matters:** if P2L generates a rig without these param names in the
-`.model3.json`, muse-vtuber can still inject them (VTS creates custom params
-on injection), but the Cubism rigger cannot wire deformers to them without
-opening the rig and re-exporting. Baking them in at generation time saves
-that manual step.
+So: baking is a convenience for rigs that will definitely use BCI. Skipping it
+is fine for general-purpose rigs.
 
 ---
 
@@ -138,12 +154,29 @@ The P2L `CLAUDE.md` should be updated to reflect generation-only scope:
 
 ## Summary of artifact contract
 
-P2L produces → muse-vtuber consumes:
+### P2L standalone (no muse-vtuber)
+P2L produces a complete rig. User loads it in VTS with iPhone face tracking.
+No BCI, no MLP runtime needed.
 
-| Artifact | Format | Required | Notes |
-|---|---|---|---|
-| `character.model3.json` | Live2D model descriptor | ✓ | Must include external_params by name |
-| `character.moc3` | Compiled rig | ✓ | |
-| `textures/` | PNG sheets | ✓ | |
-| `model.pt` | Self-describing checkpoint dict | ✓ for P2L mode | param_names must match model3.json |
-| `rig_manifest.json` | Param manifest sidecar | optional | Enables validation |
+| Artifact | Required |
+|---|---|
+| `character.model3.json` + `.moc3` + `textures/` | ✓ always |
+| `model.pt` checkpoint | only if user wants MLP face tracking in muse-vtuber |
+| BCI params in model3.json | only if user wants pre-wired BCI deformers |
+| `rig_manifest.json` | never required, aids validation |
+
+### muse-vtuber standalone (no P2L)
+User has any existing rig. muse-vtuber injects BCI params, VTS handles the rest.
+No checkpoint, no P2L output needed.
+
+### Full integration (P2L rig + muse-vtuber)
+P2L produces rig + checkpoint. muse-vtuber runs in P2L mode.
+The tightest integration: MLP drives all face params, muse-vtuber adds BCI,
+pre-wired deformers mean no manual VTS param mapping needed.
+
+| Artifact | Notes |
+|---|---|
+| `character.model3.json` + `.moc3` + `textures/` | standard rig output |
+| `model.pt` (self-describing) | `param_names` must match model3.json params |
+| BCI params in model3.json | optional but saves manual Cubism Editor work |
+| `rig_manifest.json` | optional, enables muse-vtuber startup validation |
